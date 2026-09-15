@@ -1,0 +1,30 @@
+name: Atualizar Supabase
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "supabase/**/*.sql"
+  workflow_dispatch:
+
+jobs:
+  sync:
+    name: Aplicar SQL no Supabase
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Baixar repositório
+        uses: actions/checkout@v4
+
+      - name: Instalar cliente PostgreSQL
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Aplicar atualização do banco
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          test -n "$SUPABASE_DB_URL"
+          psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/update_20260915.sql
