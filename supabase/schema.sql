@@ -101,6 +101,7 @@ alter table public.stock_movements enable row level security;
 alter table public.participants enable row level security;
 alter table public.commercial_proposals enable row level security;
 
+drop policy if exists "authenticated users manage company state" on public.company_app_state;
 create policy "authenticated users manage company state"
   on public.company_app_state
   for all
@@ -108,6 +109,7 @@ create policy "authenticated users manage company state"
   using (true)
   with check (true);
 
+drop policy if exists "authenticated users manage fiscal documents" on public.fiscal_documents;
 create policy "authenticated users manage fiscal documents"
   on public.fiscal_documents
   for all
@@ -115,6 +117,7 @@ create policy "authenticated users manage fiscal documents"
   using (true)
   with check (true);
 
+drop policy if exists "authenticated users manage fiscal products" on public.fiscal_products;
 create policy "authenticated users manage fiscal products"
   on public.fiscal_products
   for all
@@ -122,6 +125,7 @@ create policy "authenticated users manage fiscal products"
   using (true)
   with check (true);
 
+drop policy if exists "authenticated users manage stock movements" on public.stock_movements;
 create policy "authenticated users manage stock movements"
   on public.stock_movements
   for all
@@ -129,6 +133,7 @@ create policy "authenticated users manage stock movements"
   using (true)
   with check (true);
 
+drop policy if exists "authenticated users manage participants" on public.participants;
 create policy "authenticated users manage participants"
   on public.participants
   for all
@@ -136,6 +141,7 @@ create policy "authenticated users manage participants"
   using (true)
   with check (true);
 
+drop policy if exists "authenticated users manage commercial proposals" on public.commercial_proposals;
 create policy "authenticated users manage commercial proposals"
   on public.commercial_proposals
   for all

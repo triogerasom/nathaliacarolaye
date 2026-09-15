@@ -27,4 +27,5 @@ jobs:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: |
           test -n "$SUPABASE_DB_URL"
+          psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/schema.sql
           psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/update_20260915.sql
