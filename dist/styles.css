@@ -25,7 +25,8 @@ body {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
@@ -294,13 +295,23 @@ th {
 }
 
 .session-card button,
-.primary {
+.primary,
+.secondary {
   border: 0;
   border-radius: 8px;
-  background: linear-gradient(135deg, var(--gold), var(--gold-2));
-  color: var(--ink);
   font-weight: 800;
   padding: 11px 14px;
+}
+
+.primary {
+  background: linear-gradient(135deg, var(--gold), var(--gold-2));
+  color: var(--ink);
+}
+
+.secondary {
+  background: var(--ink);
+  color: var(--white);
+  border: 1px solid rgba(244, 212, 138, 0.35);
 }
 
 .view {
@@ -360,7 +371,8 @@ th {
 .flow-grid,
 .schema-grid,
 .product-grid,
-.module-grid {
+.module-grid,
+.proposal-layout {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
@@ -420,6 +432,63 @@ th {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.proposal-layout {
+  grid-template-columns: minmax(0, 1fr) 300px;
+  align-items: start;
+}
+
+.proposal-form {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.proposal-form label,
+.field-label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.88rem;
+  font-weight: 800;
+}
+
+.proposal-form input,
+.proposal-form select,
+.stock-input {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 10px 11px;
+  background: var(--white);
+  color: var(--ink);
+}
+
+.proposal-form button {
+  align-self: end;
+  min-height: 42px;
+}
+
+.proposal-summary {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 16px;
+  background: var(--ink-2);
+  color: var(--white);
+  display: grid;
+  gap: 12px;
+}
+
+.proposal-summary h2 {
+  font-size: 2rem;
+  margin: 0;
+}
+
+.muted-copy {
+  color: var(--muted);
+  margin: 14px 0 0;
 }
 
 .install-card small {
@@ -596,8 +665,13 @@ th {
   .schema-grid,
   .product-grid,
   .module-grid,
+  .proposal-form,
   .result-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .proposal-layout {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -633,6 +707,7 @@ th {
   .schema-grid,
   .product-grid,
   .module-grid,
+  .proposal-form,
   .result-grid {
     grid-template-columns: 1fr;
   }

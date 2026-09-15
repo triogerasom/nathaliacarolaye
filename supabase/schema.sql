@@ -35,8 +35,36 @@ create table if not exists public.fiscal_products (
   tax_unit text,
   fiscal_stock numeric(14, 4) not null default 0,
   average_cost numeric(14, 4) not null default 0,
+  last_purchase_at timestamptz,
+  last_purchase_price numeric(14, 4) not null default 0,
+  validity_date date,
+  category text,
+  brand text,
+  origin text,
+  cfop text,
   updated_at timestamptz not null default now(),
   unique (company_cnpj, gtin)
+);
+
+create table if not exists public.participants (
+  id uuid primary key default gen_random_uuid(),
+  company_cnpj text not null,
+  role text not null check (role in ('fornecedor', 'cliente')),
+  document text not null,
+  name text not null,
+  fantasy_name text,
+  state_registration text,
+  phone text,
+  cep text,
+  uf text,
+  city text,
+  district text,
+  street text,
+  number text,
+  last_document text,
+  last_document_at timestamptz,
+  updated_at timestamptz not null default now(),
+  unique (company_cnpj, role, document)
 );
 
 create table if not exists public.stock_movements (
@@ -53,10 +81,25 @@ create table if not exists public.stock_movements (
   created_by uuid references auth.users(id)
 );
 
+create table if not exists public.commercial_proposals (
+  id uuid primary key default gen_random_uuid(),
+  company_cnpj text not null,
+  number text not null,
+  customer_name text not null,
+  valid_until date,
+  total numeric(14, 2) not null default 0,
+  items jsonb not null default '[]'::jsonb,
+  created_at timestamptz not null default now(),
+  created_by uuid references auth.users(id),
+  unique (company_cnpj, number)
+);
+
 alter table public.company_app_state enable row level security;
 alter table public.fiscal_documents enable row level security;
 alter table public.fiscal_products enable row level security;
 alter table public.stock_movements enable row level security;
+alter table public.participants enable row level security;
+alter table public.commercial_proposals enable row level security;
 
 create policy "authenticated users manage company state"
   on public.company_app_state
@@ -81,6 +124,20 @@ create policy "authenticated users manage fiscal products"
 
 create policy "authenticated users manage stock movements"
   on public.stock_movements
+  for all
+  to authenticated
+  using (true)
+  with check (true);
+
+create policy "authenticated users manage participants"
+  on public.participants
+  for all
+  to authenticated
+  using (true)
+  with check (true);
+
+create policy "authenticated users manage commercial proposals"
+  on public.commercial_proposals
   for all
   to authenticated
   using (true)

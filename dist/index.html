@@ -67,6 +67,9 @@
           <button class="nav-item" data-view="importar" type="button">Importar XML</button>
           <button class="nav-item" data-view="estoque" type="button">Estoque Fiscal</button>
           <button class="nav-item" data-view="produtos" type="button">Produtos</button>
+          <button class="nav-item" data-view="propostas" type="button">Propostas</button>
+          <button class="nav-item" data-view="exportar" type="button">Sebrae NFe</button>
+          <button class="nav-item" data-view="integracoes" type="button">Integrações</button>
           <button class="nav-item" data-view="documentos" type="button">Entradas e Saídas</button>
           <button class="nav-item" data-view="plataforma" type="button">Base da Plataforma</button>
           <button class="nav-item" data-view="auditoria" type="button">Auditoria</button>
@@ -102,7 +105,7 @@
                 <h2>Importação de NF-e com rastreabilidade</h2>
               </div>
               <p>
-                O sistema identifica se a Nathalia é destinatária ou emitente, bloqueia chave já importada e calcula o estoque pela quantidade tributável do XML.
+                Importe XML de qualquer fornecedor ou saída emitida pela empresa. O sistema identifica entrada/saída pelo CNPJ, bloqueia duplicidade pela chave da NF-e e calcula o estoque pela quantidade tributável.
               </p>
               <div class="flow-grid">
                 <article>
@@ -124,9 +127,9 @@
             </div>
             <div class="status-board">
               <span class="status-pill ready">Pronto para XML</span>
-              <strong id="last-import-title">Amostra fiscal carregada</strong>
-              <p id="last-import-desc">NF-e de entrada CRBS/Ambev disponível para simular a primeira compra.</p>
-              <button class="primary" id="load-sample" type="button">Carregar XML Ambev</button>
+              <strong id="last-import-title">Importação ampla de NF-e</strong>
+              <p id="last-import-desc">Suba XMLs de compra e venda em lote. O estoque será movimentado por GTIN/EAN e chave de acesso.</p>
+              <button class="primary nav-shortcut" data-view="importar" type="button">Importar notas</button>
             </div>
           </section>
 
@@ -155,11 +158,11 @@
         <section class="view" id="importar">
           <section class="panel import-panel">
             <div class="drop-zone" id="drop-zone">
-              <input id="xml-input" type="file" accept=".xml,text/xml,application/xml" />
+              <input id="xml-input" type="file" accept=".xml,text/xml,application/xml" multiple />
               <div>
                 <span class="upload-icon">XML</span>
                 <h2>Importar XML de NF-e</h2>
-                <p>Arraste o arquivo aqui ou selecione o XML. O sistema valida CNPJ, chave de acesso, produtos, tributos e movimenta o estoque.</p>
+                <p>Arraste um ou vários XMLs aqui. O sistema valida CNPJ, chave de acesso, produtos, tributos, fornecedores/clientes e movimenta o estoque fiscal.</p>
                 <button class="primary" id="choose-file" type="button">Selecionar XML</button>
               </div>
             </div>
@@ -171,6 +174,7 @@
                 <li>Duplicidade: chave de acesso importada uma única vez.</li>
                 <li>Conversão: compra em caixa vira unidade tributável quando qTrib vier no XML.</li>
                 <li>XML original: mantido no registro do documento.</li>
+                <li>Validade: pode ser informada depois no estoque fiscal.</li>
               </ul>
             </aside>
           </section>
@@ -200,7 +204,9 @@
                     <th>NCM</th>
                     <th>CEST</th>
                     <th>Qtd. fiscal</th>
-                    <th>Custo médio</th>
+                    <th>Preço compra</th>
+                    <th>Data compra</th>
+                    <th>Validade</th>
                   </tr>
                 </thead>
                 <tbody id="stock-rows"></tbody>
@@ -216,6 +222,122 @@
               <h2>Produtos por GTIN/EAN</h2>
             </div>
             <div class="product-grid" id="product-cards"></div>
+          </section>
+        </section>
+
+        <section class="view" id="propostas">
+          <section class="panel proposal-layout">
+            <div>
+              <div class="section-heading">
+                <span>Comercial</span>
+                <h2>Criar proposta comercial</h2>
+              </div>
+              <form class="proposal-form" id="proposal-form">
+                <label>Cliente <input id="proposal-customer" placeholder="Nome do cliente" required /></label>
+                <label>Validade da proposta <input id="proposal-validity" type="date" /></label>
+                <label>EAN/GTIN ou código <input id="proposal-code" placeholder="789..." /></label>
+                <label>Descrição do item <input id="proposal-desc" placeholder="Produto ou serviço" required /></label>
+                <label>Quantidade <input id="proposal-qty" type="number" min="0.01" step="0.01" value="1" required /></label>
+                <label>Valor unitário <input id="proposal-price" type="number" min="0" step="0.01" value="0" required /></label>
+                <button class="primary" type="submit">Adicionar item</button>
+              </form>
+              <p class="muted-copy">Itens de proposta não entram no cadastro de produtos nem alteram estoque. Use o EAN para buscar dados existentes ou preencha manualmente.</p>
+            </div>
+            <aside class="proposal-summary">
+              <span class="status-pill ready">Rascunho</span>
+              <h2 id="proposal-total">R$ 0,00</h2>
+              <button class="primary" id="save-proposal" type="button">Salvar proposta</button>
+              <button class="secondary" id="download-proposal" type="button">Baixar proposta</button>
+            </aside>
+          </section>
+          <section class="panel">
+            <div class="section-heading">
+              <span>Itens</span>
+              <h2>Proposta atual</h2>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Código</th>
+                    <th>Descrição</th>
+                    <th>Qtd.</th>
+                    <th>Valor unit.</th>
+                    <th>Total</th>
+                    <th>Ação</th>
+                  </tr>
+                </thead>
+                <tbody id="proposal-rows"></tbody>
+              </table>
+            </div>
+          </section>
+          <section class="panel">
+            <div class="section-heading">
+              <span>Histórico</span>
+              <h2>Propostas salvas</h2>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Número</th>
+                    <th>Cliente</th>
+                    <th>Data</th>
+                    <th>Validade</th>
+                    <th>Total</th>
+                  </tr>
+                </thead>
+                <tbody id="saved-proposal-rows"></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+
+        <section class="view" id="exportar">
+          <section class="panel split">
+            <div>
+              <div class="section-heading">
+                <span>Emissor NFe Sebrae</span>
+                <h2>Exportar cadastros para importação</h2>
+              </div>
+              <p>Gere arquivos em Excel com os produtos, fornecedores e clientes cadastrados a partir das notas fiscais importadas. O arquivo de produtos segue o modelo de importação do emissor NFe Sebrae.</p>
+              <div class="flow-grid">
+                <article><strong>Produtos</strong><span>Modelo Sebrae</span><small>Inclui EAN, descrição, preço de custo, estoque, NCM, CFOP, origem e CEST.</small></article>
+                <article><strong>Fornecedores</strong><span>Base por XML</span><small>Empresas emitentes das notas de entrada.</small></article>
+                <article><strong>Clientes</strong><span>Base por XML</span><small>Destinatários das notas de saída.</small></article>
+              </div>
+            </div>
+            <aside class="install-card">
+              <button class="primary" id="export-products" type="button">Baixar produtos Sebrae</button>
+              <button class="secondary" id="export-suppliers" type="button">Baixar fornecedores</button>
+              <button class="secondary" id="export-customers" type="button">Baixar clientes</button>
+            </aside>
+          </section>
+        </section>
+
+        <section class="view" id="integracoes">
+          <section class="panel split">
+            <div>
+              <div class="section-heading">
+                <span>Integrações</span>
+                <h2>FIEMG e serviços externos</h2>
+              </div>
+              <p>Deixei a área preparada para conectar sistemas externos, mas a integração FIEMG precisa do tipo de acesso: API, planilha, portal, certificado ou login de fornecedor.</p>
+              <div class="module-grid">
+                <article class="module-card active"><strong>Supabase</strong><span>Login, senha e dados persistentes.</span></article>
+                <article class="module-card active"><strong>Vercel</strong><span>Publicação web e app instalável.</span></article>
+                <article class="module-card"><strong>FIEMG</strong><span>Aguardando credenciais ou modelo de integração.</span></article>
+              </div>
+            </div>
+            <aside class="rules-card">
+              <strong>Dados necessários para FIEMG</strong>
+              <ul>
+                <li>Nome do sistema/portal exato.</li>
+                <li>Se a integração é por API, arquivo ou preenchimento manual.</li>
+                <li>Modelo de arquivo ou documentação.</li>
+                <li>Dados obrigatórios de proposta/cadastro.</li>
+              </ul>
+            </aside>
           </section>
         </section>
 
@@ -279,12 +401,12 @@
               <h2>Modelo de dados da plataforma</h2>
             </div>
             <div class="schema-grid">
-              <article><strong>produto_mestre</strong><span>GTIN/EAN, descrição, NCM, CEST, unidade tributável, status.</span></article>
+              <article><strong>produto_mestre</strong><span>GTIN/EAN, descrição, NCM, CEST, preço de compra, última compra, validade e status.</span></article>
               <article><strong>documento_fiscal</strong><span>Chave, número, série, tipo, participante, totais e XML original.</span></article>
               <article><strong>movimentacao_estoque</strong><span>Entrada ou saída, quantidade fiscal, valor, origem e usuário.</span></article>
               <article><strong>lote_importacao</strong><span>Arquivo, data, resultado, erros, itens processados e duplicidades.</span></article>
               <article><strong>auditoria</strong><span>Antes/depois, ação feita, data, usuário e vínculo com a NF-e.</span></article>
-              <article><strong>futuro</strong><span>Clientes, fornecedores, vendas, financeiro e relatórios entram sem refazer o estoque.</span></article>
+              <article><strong>proposta_comercial</strong><span>Orçamentos sem impacto no estoque e sem criar produto mestre automaticamente.</span></article>
             </div>
           </section>
         </section>
@@ -292,6 +414,7 @@
     </main>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="./app.js"></script>
   </body>
 </html>
