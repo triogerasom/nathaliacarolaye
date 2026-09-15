@@ -22,10 +22,26 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y postgresql-client
 
-      - name: Aplicar atualização do banco
+      - name: Conferir segredo do Supabase
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: |
           test -n "$SUPABASE_DB_URL"
+
+      - name: Testar conexão com Supabase
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -c "select current_database();"
+
+      - name: Aplicar estrutura base
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
           psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/schema.sql
+
+      - name: Aplicar atualização do banco
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
           psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/update_20260915.sql
