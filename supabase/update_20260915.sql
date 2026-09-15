@@ -61,3 +61,4 @@ create policy "authenticated users manage commercial proposals"
   with check (true);
 
 -- workflow smoke test 2026-09-15
+-- workflow diagnostic test 2026-09-15
