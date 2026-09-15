@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Estoque Fiscal | Nathalia Carolayne</title>
+    <meta
+      name="description"
+      content="Plataforma fiscal e operacional da empresa 68.205.288 NATHALIA CAROLAYNE DIAS ARAUJ."
+    />
+    <meta name="theme-color" content="#090705" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Nathalia Fiscal" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="./assets/logo-nathalia.png" />
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23090705'/%3E%3Ccircle cx='32' cy='32' r='23' fill='none' stroke='%23c9972e' stroke-width='5'/%3E%3Ctext x='32' y='41' text-anchor='middle' font-family='Georgia,serif' font-size='27' font-weight='700' fill='%23fff8e7'%3ENC%3C/text%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body class="locked">
+    <section class="auth-screen" id="auth-screen" aria-label="Acesso inicial">
+      <div class="auth-card">
+        <div class="brand auth-brand">
+          <img src="./assets/logo-nathalia.png" alt="Logo Nathalia Carolayne" />
+          <div>
+            <strong>Nathalia</strong>
+            <span>Plataforma fiscal e operacional</span>
+          </div>
+        </div>
+
+        <form id="login-form" class="auth-form">
+          <span class="eyebrow">Acesso inicial</span>
+          <h1>Entrar na plataforma</h1>
+          <label for="login-email">E-mail</label>
+          <input id="login-email" type="email" autocomplete="username" value="eu15933220620@gmail.com" required />
+          <label for="login-password">Senha</label>
+          <input id="login-password" type="password" autocomplete="current-password" required />
+          <button class="primary" type="submit">Entrar</button>
+          <p class="auth-note">No primeiro acesso, a senha inicial precisa ser trocada antes de liberar o painel.</p>
+        </form>
+
+        <form id="password-form" class="auth-form hidden">
+          <span class="eyebrow">Primeiro acesso</span>
+          <h1>Criar nova senha</h1>
+          <label for="new-password">Nova senha</label>
+          <input id="new-password" type="password" autocomplete="new-password" minlength="6" required />
+          <label for="confirm-password">Confirmar senha</label>
+          <input id="confirm-password" type="password" autocomplete="new-password" minlength="6" required />
+          <button class="primary" type="submit">Salvar e entrar</button>
+          <p class="auth-note">A próxima etapa da plataforma terá usuários, permissões e banco de dados no servidor.</p>
+        </form>
+      </div>
+    </section>
+
+    <main class="app-shell">
+      <aside class="sidebar" aria-label="Navegação principal">
+        <div class="brand">
+          <img src="./assets/logo-nathalia.png" alt="Logo Nathalia Carolayne" />
+          <div>
+            <strong>Nathalia</strong>
+            <span>Estoque Fiscal MEI</span>
+          </div>
+        </div>
+
+        <nav class="nav-list">
+          <button class="nav-item active" data-view="dashboard" type="button">Dashboard</button>
+          <button class="nav-item" data-view="importar" type="button">Importar XML</button>
+          <button class="nav-item" data-view="estoque" type="button">Estoque Fiscal</button>
+          <button class="nav-item" data-view="produtos" type="button">Produtos</button>
+          <button class="nav-item" data-view="documentos" type="button">Entradas e Saídas</button>
+          <button class="nav-item" data-view="plataforma" type="button">Base da Plataforma</button>
+          <button class="nav-item" data-view="auditoria" type="button">Auditoria</button>
+        </nav>
+
+        <section class="company-card">
+          <span>Empresa ativa</span>
+          <strong>68.205.288 NATHALIA CAROLAYNE DIAS ARAUJ</strong>
+          <small>CNPJ 68.205.288/0001-74 · IE 0056002090061 · MG</small>
+        </section>
+      </aside>
+
+      <section class="workspace">
+        <header class="topbar">
+          <div>
+            <span class="eyebrow">Fase 1</span>
+            <h1 id="view-title">Dashboard fiscal</h1>
+          </div>
+          <div class="session-card" id="login-card">
+            <span>Usuário conectado</span>
+            <strong id="session-email">eu15933220620@gmail.com</strong>
+            <button id="logout-button" type="button">Sair</button>
+          </div>
+        </header>
+
+        <section class="view active" id="dashboard">
+          <div class="kpi-grid" id="kpi-grid"></div>
+
+          <section class="panel split">
+            <div>
+              <div class="section-heading">
+                <span>Operação fiscal</span>
+                <h2>Importação de NF-e com rastreabilidade</h2>
+              </div>
+              <p>
+                O sistema identifica se a Nathalia é destinatária ou emitente, bloqueia chave já importada e calcula o estoque pela quantidade tributável do XML.
+              </p>
+              <div class="flow-grid">
+                <article>
+                  <strong>Entrada</strong>
+                  <span>Destinatária no XML</span>
+                  <small>Aumenta o estoque fiscal por GTIN/EAN.</small>
+                </article>
+                <article>
+                  <strong>Saída</strong>
+                  <span>Emitente no XML</span>
+                  <small>Reduz o estoque fiscal e registra baixa vinculada à NF-e.</small>
+                </article>
+                <article>
+                  <strong>DANFE nº 2</strong>
+                  <span>Modelo de baixa</span>
+                  <small>Usado como referência visual. A automação completa exige o XML da saída.</small>
+                </article>
+              </div>
+            </div>
+            <div class="status-board">
+              <span class="status-pill ready">Pronto para XML</span>
+              <strong id="last-import-title">Amostra fiscal carregada</strong>
+              <p id="last-import-desc">NF-e de entrada CRBS/Ambev disponível para simular a primeira compra.</p>
+              <button class="primary" id="load-sample" type="button">Carregar XML Ambev</button>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="section-heading">
+              <span>Últimas movimentações</span>
+              <h2>Histórico fiscal</h2>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Data</th>
+                    <th>Tipo</th>
+                    <th>Produto</th>
+                    <th>Qtd.</th>
+                    <th>Documento</th>
+                  </tr>
+                </thead>
+                <tbody id="movement-rows"></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+
+        <section class="view" id="importar">
+          <section class="panel import-panel">
+            <div class="drop-zone" id="drop-zone">
+              <input id="xml-input" type="file" accept=".xml,text/xml,application/xml" />
+              <div>
+                <span class="upload-icon">XML</span>
+                <h2>Importar XML de NF-e</h2>
+                <p>Arraste o arquivo aqui ou selecione o XML. O sistema valida CNPJ, chave de acesso, produtos, tributos e movimenta o estoque.</p>
+                <button class="primary" id="choose-file" type="button">Selecionar XML</button>
+              </div>
+            </div>
+            <aside class="rules-card">
+              <strong>Regras desta fase</strong>
+              <ul>
+                <li>Entrada: CNPJ da empresa aparece como destinatário.</li>
+                <li>Saída: CNPJ da empresa aparece como emitente.</li>
+                <li>Duplicidade: chave de acesso importada uma única vez.</li>
+                <li>Conversão: compra em caixa vira unidade tributável quando qTrib vier no XML.</li>
+                <li>XML original: mantido no registro do documento.</li>
+              </ul>
+            </aside>
+          </section>
+
+          <section class="panel" id="import-result">
+            <div class="section-heading">
+              <span>Resultado</span>
+              <h2>Aguardando XML</h2>
+            </div>
+            <p>Importe uma NF-e para ver aqui os dados fiscais extraídos.</p>
+          </section>
+        </section>
+
+        <section class="view" id="estoque">
+          <section class="panel">
+            <div class="section-heading">
+              <span>Saldo por produto</span>
+              <h2>Estoque Fiscal</h2>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Produto</th>
+                    <th>EAN comercial</th>
+                    <th>EAN tributável</th>
+                    <th>NCM</th>
+                    <th>CEST</th>
+                    <th>Qtd. fiscal</th>
+                    <th>Custo médio</th>
+                  </tr>
+                </thead>
+                <tbody id="stock-rows"></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+
+        <section class="view" id="produtos">
+          <section class="panel">
+            <div class="section-heading">
+              <span>Cadastro mestre</span>
+              <h2>Produtos por GTIN/EAN</h2>
+            </div>
+            <div class="product-grid" id="product-cards"></div>
+          </section>
+        </section>
+
+        <section class="view" id="documentos">
+          <section class="panel">
+            <div class="section-heading">
+              <span>Notas importadas</span>
+              <h2>Entradas e saídas fiscais</h2>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Tipo</th>
+                    <th>Número/Série</th>
+                    <th>Data</th>
+                    <th>Fornecedor/Cliente</th>
+                    <th>Chave</th>
+                    <th>Valor</th>
+                  </tr>
+                </thead>
+                <tbody id="document-rows"></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+
+        <section class="view" id="plataforma">
+          <section class="panel split">
+            <div>
+              <div class="section-heading">
+                <span>Construção de longo prazo</span>
+                <h2>Base para uma plataforma completa</h2>
+              </div>
+              <p>
+                A estrutura já está organizada para crescer como sistema de atacarejo: começando pelo estoque fiscal e abrindo caminho para compras, vendas, clientes, fornecedores, financeiro e relatórios.
+              </p>
+              <div class="module-grid">
+                <article class="module-card active"><strong>Estoque Fiscal</strong><span>XML NF-e, produtos, entradas, saídas e auditoria.</span></article>
+                <article class="module-card"><strong>Vendas</strong><span>Pedidos, balcão, baixa automática e cupom fiscal.</span></article>
+                <article class="module-card"><strong>Compras</strong><span>Fornecedores, pedidos de compra e conferência de nota.</span></article>
+                <article class="module-card"><strong>Financeiro</strong><span>Contas a pagar, receber, caixa e fluxo de dinheiro.</span></article>
+                <article class="module-card"><strong>Clientes</strong><span>Cadastro, histórico, limites e comunicação.</span></article>
+                <article class="module-card"><strong>Relatórios</strong><span>Lucro por produto, giro de estoque, impostos e dashboards.</span></article>
+              </div>
+            </div>
+            <aside class="install-card">
+              <span class="status-pill ready">Instalável</span>
+              <h2>Usar como app</h2>
+              <p>Em Android, use “Instalar app” quando aparecer no navegador. No iPhone, toque em compartilhar e depois “Adicionar à Tela de Início”.</p>
+              <button class="primary" id="install-button" type="button" hidden>Instalar app</button>
+              <small>Depois de instalado, a plataforma abre em tela cheia e mantém a identidade visual da empresa.</small>
+            </aside>
+          </section>
+        </section>
+
+        <section class="view" id="auditoria">
+          <section class="panel schema-panel">
+            <div class="section-heading">
+              <span>Base preparada</span>
+              <h2>Modelo de dados da plataforma</h2>
+            </div>
+            <div class="schema-grid">
+              <article><strong>produto_mestre</strong><span>GTIN/EAN, descrição, NCM, CEST, unidade tributável, status.</span></article>
+              <article><strong>documento_fiscal</strong><span>Chave, número, série, tipo, participante, totais e XML original.</span></article>
+              <article><strong>movimentacao_estoque</strong><span>Entrada ou saída, quantidade fiscal, valor, origem e usuário.</span></article>
+              <article><strong>lote_importacao</strong><span>Arquivo, data, resultado, erros, itens processados e duplicidades.</span></article>
+              <article><strong>auditoria</strong><span>Antes/depois, ação feita, data, usuário e vínculo com a NF-e.</span></article>
+              <article><strong>futuro</strong><span>Clientes, fornecedores, vendas, financeiro e relatórios entram sem refazer o estoque.</span></article>
+            </div>
+          </section>
+        </section>
+      </section>
+    </main>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="./app.js"></script>
+  </body>
+</html>

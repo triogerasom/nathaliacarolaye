@@ -1,0 +1,19 @@
+{
+  "name": "Nathalia Fiscal",
+  "short_name": "Nathalia",
+  "description": "Plataforma fiscal e operacional da empresa Nathalia Carolayne.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#090705",
+  "theme_color": "#090705",
+  "icons": [
+    {
+      "src": "./assets/logo-nathalia.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

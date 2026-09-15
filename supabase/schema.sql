@@ -1,0 +1,87 @@
+create extension if not exists pgcrypto;
+
+create table if not exists public.company_app_state (
+  company_cnpj text primary key,
+  data jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default now(),
+  updated_by uuid references auth.users(id)
+);
+
+create table if not exists public.fiscal_documents (
+  id uuid primary key default gen_random_uuid(),
+  company_cnpj text not null,
+  access_key text not null,
+  direction text not null check (direction in ('entrada', 'saida')),
+  number text,
+  series text,
+  issued_at timestamptz,
+  participant_name text,
+  participant_cnpj text,
+  total numeric(14, 2) default 0,
+  xml_original text not null,
+  created_at timestamptz not null default now(),
+  created_by uuid references auth.users(id),
+  unique (company_cnpj, access_key)
+);
+
+create table if not exists public.fiscal_products (
+  id uuid primary key default gen_random_uuid(),
+  company_cnpj text not null,
+  gtin text not null,
+  commercial_gtin text,
+  description text not null,
+  ncm text,
+  cest text,
+  tax_unit text,
+  fiscal_stock numeric(14, 4) not null default 0,
+  average_cost numeric(14, 4) not null default 0,
+  updated_at timestamptz not null default now(),
+  unique (company_cnpj, gtin)
+);
+
+create table if not exists public.stock_movements (
+  id uuid primary key default gen_random_uuid(),
+  company_cnpj text not null,
+  fiscal_document_id uuid references public.fiscal_documents(id) on delete cascade,
+  product_gtin text not null,
+  direction text not null check (direction in ('entrada', 'saida')),
+  quantity numeric(14, 4) not null,
+  unit text,
+  cfop text,
+  value numeric(14, 2) default 0,
+  created_at timestamptz not null default now(),
+  created_by uuid references auth.users(id)
+);
+
+alter table public.company_app_state enable row level security;
+alter table public.fiscal_documents enable row level security;
+alter table public.fiscal_products enable row level security;
+alter table public.stock_movements enable row level security;
+
+create policy "authenticated users manage company state"
+  on public.company_app_state
+  for all
+  to authenticated
+  using (true)
+  with check (true);
+
+create policy "authenticated users manage fiscal documents"
+  on public.fiscal_documents
+  for all
+  to authenticated
+  using (true)
+  with check (true);
+
+create policy "authenticated users manage fiscal products"
+  on public.fiscal_products
+  for all
+  to authenticated
+  using (true)
+  with check (true);
+
+create policy "authenticated users manage stock movements"
+  on public.stock_movements
+  for all
+  to authenticated
+  using (true)
+  with check (true);
