@@ -63,3 +63,4 @@ create policy "authenticated users manage commercial proposals"
 -- workflow smoke test 2026-09-15
 -- workflow diagnostic test 2026-09-15
 -- workflow retest 2026-09-15 19:46:24 -03:00
+-- workflow retest direct-db 2026-09-15 19:52:16 -03:00
