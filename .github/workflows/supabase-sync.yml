@@ -27,6 +27,14 @@ jobs:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: |
           test -n "$SUPABASE_DB_URL"
+          case "$SUPABASE_DB_URL" in
+            postgresql://*|postgres://*) ;;
+            *)
+              echo "SUPABASE_DB_URL deve ser a connection string do banco PostgreSQL, começando com postgresql:// ou postgres://."
+              echo "Não use a API URL https://...supabase.co/rest/v1/ neste segredo."
+              exit 1
+              ;;
+          esac
 
       - name: Testar conexão com Supabase
         env:
