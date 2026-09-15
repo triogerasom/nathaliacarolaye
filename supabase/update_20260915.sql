@@ -59,3 +59,5 @@ create policy "authenticated users manage commercial proposals"
   to authenticated
   using (true)
   with check (true);
+
+-- workflow smoke test 2026-09-15
