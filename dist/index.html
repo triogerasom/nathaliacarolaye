@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Estoque Fiscal | Nathalia Carolayne</title>
+    <title>Central Fiscal e Licitações | Nathalia Carolayne</title>
     <meta
       name="description"
       content="Plataforma fiscal e operacional da empresa 68.205.288 NATHALIA CAROLAYNE DIAS ARAUJ."
@@ -24,13 +24,13 @@
           <img src="./assets/logo-nathalia.png" alt="Logo Nathalia Carolayne" />
           <div>
             <strong>Nathalia</strong>
-            <span>Plataforma fiscal e operacional</span>
+            <span>Central fiscal, compras e licitações</span>
           </div>
         </div>
 
         <form id="login-form" class="auth-form">
           <span class="eyebrow">Acesso inicial</span>
-          <h1>Entrar na plataforma</h1>
+          <h1>Entrar na central</h1>
           <label for="login-email">E-mail</label>
           <input id="login-email" type="email" autocomplete="username" value="eu15933220620@gmail.com" required />
           <label for="login-password">Senha</label>
@@ -58,7 +58,7 @@
           <img src="./assets/logo-nathalia.png" alt="Logo Nathalia Carolayne" />
           <div>
             <strong>Nathalia</strong>
-            <span>Estoque Fiscal MEI</span>
+            <span>Central de Operações</span>
           </div>
         </div>
 
@@ -68,25 +68,26 @@
           <button class="nav-item" data-view="estoque" type="button">Estoque Fiscal</button>
           <button class="nav-item" data-view="produtos" type="button">Produtos</button>
           <button class="nav-item" data-view="propostas" type="button">Propostas</button>
+          <button class="nav-item" data-view="integracoes" type="button">Compras FIEMG</button>
           <button class="nav-item" data-view="exportar" type="button">Sebrae NFe</button>
-          <button class="nav-item" data-view="integracoes" type="button">Integrações</button>
           <button class="nav-item" data-view="documentos" type="button">Entradas e Saídas</button>
           <button class="nav-item" data-view="plataforma" type="button">Base da Plataforma</button>
           <button class="nav-item" data-view="auditoria" type="button">Auditoria</button>
         </nav>
 
         <section class="company-card">
-          <span>Empresa ativa</span>
+          <span>Operação ativa</span>
           <strong>68.205.288 NATHALIA CAROLAYNE DIAS ARAUJ</strong>
           <small>CNPJ 68.205.288/0001-74 · IE 0056002090061 · MG</small>
+          <a href="https://compras.fiemg.com.br/" target="_blank" rel="noreferrer">Abrir Compras FIEMG</a>
         </section>
       </aside>
 
       <section class="workspace">
         <header class="topbar">
           <div>
-            <span class="eyebrow">Fase 1</span>
-            <h1 id="view-title">Dashboard fiscal</h1>
+            <span class="eyebrow">Central operacional</span>
+            <h1 id="view-title">Painel executivo</h1>
           </div>
           <div class="session-card" id="login-card">
             <span>Usuário conectado</span>
@@ -96,6 +97,18 @@
         </header>
 
         <section class="view active" id="dashboard">
+          <section class="hero-ops">
+            <div>
+              <span class="eyebrow">Estrutura de ouro para MEI crescer</span>
+              <h2>Estoque fiscal, oportunidades e propostas no mesmo fluxo</h2>
+              <p>O painel foi reorganizado para operar como uma pequena central de compras: entra XML, nasce estoque fiscal, acompanha oportunidade, monta proposta e prepara exportação para emissão.</p>
+            </div>
+            <div class="hero-actions">
+              <button class="primary nav-shortcut" data-view="importar" type="button">Importar XML</button>
+              <button class="secondary nav-shortcut" data-view="integracoes" type="button">Ver FIEMG</button>
+            </div>
+          </section>
+
           <div class="kpi-grid" id="kpi-grid"></div>
 
           <section class="panel split">
@@ -119,9 +132,9 @@
                   <small>Reduz o estoque fiscal e registra baixa vinculada à NF-e.</small>
                 </article>
                 <article>
-                  <strong>DANFE nº 2</strong>
-                  <span>Modelo de baixa</span>
-                  <small>Usado como referência visual. A automação completa exige o XML da saída.</small>
+                  <strong>Licitação</strong>
+                  <span>Compras FIEMG</span>
+                  <small>Registre oportunidades, prazo, valor estimado e decisão comercial.</small>
                 </article>
               </div>
             </div>
@@ -316,28 +329,81 @@
         </section>
 
         <section class="view" id="integracoes">
-          <section class="panel split">
+          <section class="panel fiemg-panel">
             <div>
               <div class="section-heading">
-                <span>Integrações</span>
-                <h2>FIEMG e serviços externos</h2>
+                <span>Portal de compras eletrônicas</span>
+                <h2>Compras FIEMG</h2>
               </div>
-              <p>Deixei a área preparada para conectar sistemas externos, mas a integração FIEMG precisa do tipo de acesso: API, planilha, portal, certificado ou login de fornecedor.</p>
-              <div class="module-grid">
-                <article class="module-card active"><strong>Supabase</strong><span>Login, senha e dados persistentes.</span></article>
-                <article class="module-card active"><strong>Vercel</strong><span>Publicação web e app instalável.</span></article>
-                <article class="module-card"><strong>FIEMG</strong><span>Aguardando credenciais ou modelo de integração.</span></article>
+              <p>O portal público da FIEMG lista processos em andamento e encerrados. Como não há API pública aberta, esta primeira integração cria uma mesa de controle: abrir portal, registrar oportunidade, calcular decisão e preparar proposta.</p>
+              <div class="integration-strip">
+                <article><strong>Fonte</strong><span>compras.fiemg.com.br</span></article>
+                <article><strong>Modo atual</strong><span>Portal assistido</span></article>
+                <article><strong>Próxima etapa</strong><span>Credencial/API ou captura autorizada</span></article>
               </div>
             </div>
-            <aside class="rules-card">
-              <strong>Dados necessários para FIEMG</strong>
-              <ul>
-                <li>Nome do sistema/portal exato.</li>
-                <li>Se a integração é por API, arquivo ou preenchimento manual.</li>
-                <li>Modelo de arquivo ou documentação.</li>
-                <li>Dados obrigatórios de proposta/cadastro.</li>
-              </ul>
+            <aside class="portal-card">
+              <span class="status-pill ready">Conector inicial</span>
+              <strong>Portal Compras FIEMG</strong>
+              <p>Abra o portal, consulte o processo e registre aqui os dados que interessam para a proposta.</p>
+              <a class="primary link-button" href="https://compras.fiemg.com.br/" target="_blank" rel="noreferrer">Abrir portal FIEMG</a>
             </aside>
+          </section>
+
+          <section class="panel proposal-layout">
+            <div>
+              <div class="section-heading">
+                <span>Oportunidade</span>
+                <h2>Registrar processo FIEMG</h2>
+              </div>
+              <form class="proposal-form" id="fiemg-form">
+                <label>Processo <input id="fiemg-process" placeholder="Ex.: CDE 2026000098" required /></label>
+                <label>Objeto <input id="fiemg-object" placeholder="Produto ou serviço solicitado" required /></label>
+                <label>Órgão/entidade <input id="fiemg-entity" placeholder="FIEMG, SESI, SENAI, IEL..." /></label>
+                <label>Encerra em <input id="fiemg-deadline" type="date" /></label>
+                <label>Valor estimado <input id="fiemg-value" type="number" min="0" step="0.01" value="0" /></label>
+                <label>Status
+                  <select id="fiemg-status">
+                    <option>Mapeando</option>
+                    <option>Separar documentos</option>
+                    <option>Precificar</option>
+                    <option>Proposta enviada</option>
+                    <option>Não participar</option>
+                  </select>
+                </label>
+                <label class="wide-field">Próxima ação <input id="fiemg-next" placeholder="Ex.: cotar Ambev, conferir validade, montar proposta" /></label>
+                <button class="primary" type="submit">Salvar oportunidade</button>
+              </form>
+            </div>
+            <aside class="proposal-summary">
+              <span class="status-pill ready">Mesa FIEMG</span>
+              <h2 id="fiemg-total">0</h2>
+              <p>oportunidades acompanhadas</p>
+              <small>Use esta mesa para transformar edital em checklist comercial.</small>
+            </aside>
+          </section>
+
+          <section class="panel">
+            <div class="section-heading">
+              <span>Pipeline</span>
+              <h2>Oportunidades FIEMG</h2>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Processo</th>
+                    <th>Objeto</th>
+                    <th>Entidade</th>
+                    <th>Prazo</th>
+                    <th>Valor</th>
+                    <th>Status</th>
+                    <th>Próxima ação</th>
+                  </tr>
+                </thead>
+                <tbody id="fiemg-rows"></tbody>
+              </table>
+            </div>
           </section>
         </section>
 

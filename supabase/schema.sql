@@ -94,12 +94,29 @@ create table if not exists public.commercial_proposals (
   unique (company_cnpj, number)
 );
 
+create table if not exists public.fiemg_opportunities (
+  id uuid primary key default gen_random_uuid(),
+  company_cnpj text not null,
+  process text not null,
+  object text not null,
+  entity text,
+  deadline date,
+  estimated_value numeric(14, 2) not null default 0,
+  status text not null default 'Mapeando',
+  next_step text,
+  source_url text,
+  created_at timestamptz not null default now(),
+  created_by uuid references auth.users(id),
+  unique (company_cnpj, process)
+);
+
 alter table public.company_app_state enable row level security;
 alter table public.fiscal_documents enable row level security;
 alter table public.fiscal_products enable row level security;
 alter table public.stock_movements enable row level security;
 alter table public.participants enable row level security;
 alter table public.commercial_proposals enable row level security;
+alter table public.fiemg_opportunities enable row level security;
 
 drop policy if exists "authenticated users manage company state" on public.company_app_state;
 create policy "authenticated users manage company state"
@@ -144,6 +161,14 @@ create policy "authenticated users manage participants"
 drop policy if exists "authenticated users manage commercial proposals" on public.commercial_proposals;
 create policy "authenticated users manage commercial proposals"
   on public.commercial_proposals
+  for all
+  to authenticated
+  using (true)
+  with check (true);
+
+drop policy if exists "authenticated users manage fiemg opportunities" on public.fiemg_opportunities;
+create policy "authenticated users manage fiemg opportunities"
+  on public.fiemg_opportunities
   for all
   to authenticated
   using (true)

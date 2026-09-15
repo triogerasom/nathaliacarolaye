@@ -31,6 +31,9 @@ const initialState = {
   customers: {},
   proposals: [],
   currentProposal: { customer: "", validity: "", items: [] },
+  fiemg: {
+    opportunities: [],
+  },
 };
 
 let state = loadState();
@@ -52,6 +55,11 @@ function loadState() {
     suppliers: loaded.suppliers || {},
     customers: loaded.customers || {},
     proposals: loaded.proposals || [],
+    fiemg: {
+      ...structuredClone(initialState.fiemg),
+      ...(loaded.fiemg || {}),
+      opportunities: loaded.fiemg?.opportunities || [],
+    },
     currentProposal: {
       ...structuredClone(initialState.currentProposal),
       ...(loaded.currentProposal || {}),
@@ -165,6 +173,23 @@ async function saveRemoteState() {
     data: payload,
     updated_by: userData.user?.id || null,
     updated_at: new Date().toISOString(),
+  });
+}
+
+async function saveFiemgOpportunityRemote(opportunity) {
+  if (!supabaseReady || !supabaseClient || !state.auth.loggedIn) return;
+  const { data: userData } = await supabaseClient.auth.getUser();
+  await supabaseClient.from("fiemg_opportunities").upsert({
+    company_cnpj: COMPANY.cnpj,
+    process: opportunity.process,
+    object: opportunity.object,
+    entity: opportunity.entity || null,
+    deadline: opportunity.deadline || null,
+    estimated_value: opportunity.estimatedValue || 0,
+    status: opportunity.status,
+    next_step: opportunity.nextStep || null,
+    source_url: opportunity.sourceUrl,
+    created_by: userData.user?.id || null,
   });
 }
 
@@ -343,6 +368,7 @@ function render() {
   renderProducts();
   renderDocuments();
   renderProposal();
+  renderFiemg();
 }
 
 function renderKpis() {
@@ -350,13 +376,14 @@ function renderKpis() {
   const documents = state.documents;
   const entries = documents.filter((doc) => doc.type === "entrada");
   const exits = documents.filter((doc) => doc.type === "saida");
+  const fiemgOpen = state.fiemg.opportunities.filter((item) => item.status !== "Não participar" && item.status !== "Proposta enviada").length;
   const stockUnits = products.reduce((sum, product) => sum + Number(product.stock || 0), 0);
   const stockValue = products.reduce((sum, product) => sum + Math.max(Number(product.stock || 0), 0) * Number(product.lastPurchasePrice || 0), 0);
   const cards = [
     ["Itens fiscais", number.format(stockUnits), "Saldo em unidade tributável"],
     ["Valor estimado", money.format(stockValue), "Último preço de compra"],
     ["Entradas", entries.length, "NF-e em que a empresa é destinatária"],
-    ["Saídas", exits.length, "NF-e em que a empresa é emitente"],
+    ["FIEMG abertas", fiemgOpen, "Processos em acompanhamento"],
   ];
   document.getElementById("kpi-grid").innerHTML = cards.map(([label, value, hint]) => `
     <article class="kpi-card"><span>${label}</span><strong>${value}</strong><small>${hint}</small></article>
@@ -461,6 +488,23 @@ function renderProposal() {
   document.getElementById("saved-proposal-rows").innerHTML = state.proposals.map((proposal) => `
     <tr><td>${proposal.number}</td><td>${proposal.customer}</td><td>${formatDate(proposal.createdAt)}</td><td>${formatDate(proposal.validity)}</td><td>${money.format(proposal.total)}</td></tr>
   `).join("") || emptyRow(5, "Nenhuma proposta salva.");
+}
+
+function renderFiemg() {
+  const opportunities = state.fiemg.opportunities || [];
+  const rows = opportunities.map((item) => `
+    <tr>
+      <td><strong>${item.process}</strong><br><small>${formatDate(item.createdAt)}</small></td>
+      <td>${item.object}</td>
+      <td>${item.entity || "-"}</td>
+      <td>${formatDate(item.deadline)}</td>
+      <td>${money.format(item.estimatedValue || 0)}</td>
+      <td>${item.status}</td>
+      <td>${item.nextStep || "-"}</td>
+    </tr>
+  `);
+  document.getElementById("fiemg-total").textContent = opportunities.length;
+  document.getElementById("fiemg-rows").innerHTML = rows.join("") || emptyRow(7, "Nenhuma oportunidade FIEMG registrada ainda.");
 }
 
 function emptyRow(cols, message) {
@@ -713,6 +757,32 @@ document.getElementById("save-proposal").addEventListener("click", () => {
   saveState();
   renderProposal();
   showToast("Proposta salva sem movimentar estoque.");
+});
+
+document.getElementById("fiemg-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const opportunity = {
+    id: crypto.randomUUID(),
+    process: document.getElementById("fiemg-process").value.trim(),
+    object: document.getElementById("fiemg-object").value.trim(),
+    entity: document.getElementById("fiemg-entity").value.trim(),
+    deadline: document.getElementById("fiemg-deadline").value,
+    estimatedValue: toNumber(document.getElementById("fiemg-value").value),
+    status: document.getElementById("fiemg-status").value,
+    nextStep: document.getElementById("fiemg-next").value.trim(),
+    source: "Compras FIEMG",
+    sourceUrl: "https://compras.fiemg.com.br/",
+    createdAt: new Date().toISOString(),
+  };
+  if (!opportunity.process || !opportunity.object) return showToast("Informe processo e objeto da oportunidade.");
+  state.fiemg.opportunities.unshift(opportunity);
+  document.getElementById("fiemg-form").reset();
+  document.getElementById("fiemg-value").value = "0";
+  saveState();
+  await saveFiemgOpportunityRemote(opportunity);
+  renderFiemg();
+  renderKpis();
+  showToast("Oportunidade FIEMG salva no pipeline.");
 });
 
 document.getElementById("download-proposal").addEventListener("click", downloadProposal);
