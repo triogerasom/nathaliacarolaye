@@ -147,6 +147,134 @@ function fiscalConversion({ description, uCom, qCom, uTrib, qTrib, vProd, vUnTri
   };
 }
 
+function validGtin(value) {
+  const digits = onlyDigits(value);
+  return [8, 12, 13, 14].includes(digits.length) && !/^0+$/.test(digits) ? digits : "";
+}
+
+function normalizedProductWords(value) {
+  const ignored = new Set(["A", "O", "DE", "DA", "DO", "DAS", "DOS", "COM", "C", "CX", "CAIXA", "FD", "FARDO", "PCT", "PACOTE", "UN", "UND", "UNID", "UNIDADE", "UNIDADES", "LT", "LATA", "GARRAFA", "PET", "PACK", "FRIDGE", "DRINK"]);
+  return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[^A-Z0-9]+/g, " ").trim().split(/\s+/).filter((word) => word.length > 1 && !ignored.has(word) && !/^\d+(?:ML|L|G|KG)?$/.test(word));
+}
+
+function productMatchScore(item, product) {
+  const source = new Set(normalizedProductWords(item.description));
+  const target = new Set(normalizedProductWords(product.description));
+  if (!source.size || !target.size) return { score: 0, common: 0, coverage: 0 };
+  const common = [...source].filter((word) => target.has(word)).length;
+  const coverage = common / Math.min(source.size, target.size);
+  const dice = (2 * common) / (source.size + target.size);
+  const ncmBonus = item.ncm && product.ncm && item.ncm === product.ncm ? 0.08 : 0;
+  return { score: Math.min(1, coverage * 0.65 + dice * 0.35 + ncmBonus), common, coverage };
+}
+
+function fallbackProductKey(item) {
+  const code = String(item.code || "").trim();
+  const description = normalizedProductWords(item.description).join("-").slice(0, 80) || "PRODUTO";
+  return `SEMGTIN:${code || description}`;
+}
+
+function resolveProductKey(item, products, direction) {
+  const gtin = validGtin(item.eanTrib) || validGtin(item.ean);
+  if (gtin && products[gtin]) return { key: gtin, source: "gtin" };
+  if (direction === "entrada") return { key: gtin || fallbackProductKey(item), source: gtin ? "gtin" : "cadastro_sem_gtin" };
+  const candidates = Object.values(products).filter((product) => product.purchaseHistory?.length);
+  const ranked = candidates.map((product) => ({ product, ...productMatchScore(item, product) })).sort((a, b) => b.score - a.score);
+  const best = ranked[0];
+  if (best && best.common >= 2 && best.coverage >= 0.66 && best.score >= 0.72) return { key: best.product.key, source: "descricao_ncm" };
+  return { key: gtin || fallbackProductKey(item), source: gtin ? "gtin_novo" : "nao_conciliado" };
+}
+
+function rebuildFiscalLedger() {
+  if (!state.documents?.length) return;
+  const previousProducts = state.products || {};
+  const products = {};
+  const movements = [];
+  const suppliers = {};
+  const customers = {};
+  const documents = [...state.documents].sort((a, b) => {
+    const dateOrder = String(a.issuedAt || "").localeCompare(String(b.issuedAt || ""));
+    return dateOrder || (a.type === b.type ? 0 : a.type === "entrada" ? -1 : 1);
+  });
+
+  documents.forEach((document) => {
+    if (document.type === "entrada" && document.emit) suppliers[document.emit.cnpj || document.emit.name] = { ...document.emit, lastDocument: document.number, lastDate: document.issuedAt };
+    if (document.type === "saida" && document.dest) customers[document.dest.cnpj || document.dest.name] = { ...document.dest, lastDocument: document.number, lastDate: document.issuedAt };
+    document.items.forEach((item, itemIndex) => {
+      if (document.type === "entrada" && (!item.fiscalQuantity || !item.unitCost)) {
+        Object.assign(item, fiscalConversion(item));
+      }
+      const resolution = resolveProductKey(item, products, document.type);
+      const preserved = previousProducts[resolution.key] || {};
+      const gtin = validGtin(item.eanTrib) || validGtin(item.ean);
+      const product = products[resolution.key] || {
+        key: resolution.key,
+        ean: gtin || preserved.ean || "SEM GTIN",
+        eanTrib: gtin || preserved.eanTrib || "SEM GTIN",
+        internalCode: item.code || preserved.internalCode || "",
+        description: item.description || preserved.description || "Produto sem descrição",
+        ncm: item.ncm || preserved.ncm || "",
+        cest: item.cest || preserved.cest || "",
+        uTrib: item.uTrib || preserved.uTrib || "UN",
+        stock: 0,
+        averageCost: 0,
+        totalCost: 0,
+        documents: 0,
+        lastPurchase: "",
+        lastPurchasePrice: 0,
+        validity: preserved.validity || "",
+        purchaseHistory: [],
+        saleHistory: [],
+        salePrice: Number(preserved.salePrice || 0),
+        category: preserved.category || "Mercadorias",
+        brand: preserved.brand || "",
+        origin: preserved.origin || "NACIONAL",
+        cfop: item.cfop || preserved.cfop || "",
+        aliases: [...(preserved.aliases || [])],
+      };
+
+      item.productKey = resolution.key;
+      item.matchSource = resolution.source;
+      if (document.type === "entrada") {
+        const quantity = Number(item.fiscalQuantity || item.qTrib || item.qCom || 0);
+        const unitCost = quantity > 0 ? Number(item.vProd || 0) / quantity : Number(item.unitCost || item.vUnTrib || item.vUnCom || 0);
+        const stockBefore = Math.max(Number(product.stock || 0), 0);
+        const valueBefore = stockBefore * Number(product.averageCost || product.lastPurchasePrice || 0);
+        product.stock += quantity;
+        product.averageCost = stockBefore + quantity > 0 ? (valueBefore + Number(item.vProd || 0)) / (stockBefore + quantity) : unitCost;
+        product.totalCost += Number(item.vProd || 0);
+        product.documents += 1;
+        product.lastPurchase = document.issuedAt;
+        product.lastPurchasePrice = unitCost;
+        product.description = item.description || product.description;
+        product.ncm = item.ncm || product.ncm;
+        product.cest = item.cest || product.cest;
+        product.uTrib = item.fiscalUnit || item.uTrib || product.uTrib;
+        product.cfop = item.cfop || product.cfop;
+        product.purchaseHistory.unshift({ date: document.issuedAt, supplier: document.emit?.name || "", supplierCnpj: document.emit?.cnpj || "", quantity, unitCost, total: Number(item.vProd || 0), documentKey: document.key, itemIndex, commercialQuantity: item.qCom, commercialUnit: item.uCom, conversion: item.conversion || 1 });
+        movements.push({ id: `${document.key}:${itemIndex}`, date: document.issuedAt, type: "entrada", productKey: resolution.key, product: product.description, quantity, unit: product.uTrib, commercialQuantity: item.qCom, commercialUnit: item.uCom, conversion: item.conversion || 1, unitCost, costTotal: Number(item.vProd || 0), revenue: 0, grossProfit: 0, itemIndex, documentKey: document.key, documentNumber: document.number, participant: document.emit?.name || document.participant, cfop: item.cfop, value: Number(item.vProd || 0) });
+      } else {
+        const quantity = Number(item.qTrib || item.qCom || 0);
+        const unitSalePrice = quantity > 0 ? Number(item.vProd || 0) / quantity : Number(item.vUnTrib || item.vUnCom || 0);
+        const unitCost = Number(product.averageCost || product.lastPurchasePrice || 0);
+        const costTotal = quantity * unitCost;
+        const revenue = Number(item.vProd || 0);
+        const grossProfit = revenue - costTotal;
+        product.stock -= quantity;
+        product.salePrice = unitSalePrice || product.salePrice;
+        product.saleHistory.unshift({ date: document.issuedAt, customer: document.dest?.name || "", quantity, unitSalePrice, unitCost, revenue, costTotal, grossProfit, documentKey: document.key, itemIndex });
+        if (item.description && item.description !== product.description && !product.aliases.includes(item.description)) product.aliases.push(item.description);
+        movements.push({ id: `${document.key}:${itemIndex}`, date: document.issuedAt, type: "saida", productKey: resolution.key, product: product.description, sourceDescription: item.description, matchSource: resolution.source, quantity: -quantity, unit: product.uTrib || item.uTrib, commercialQuantity: item.qCom, commercialUnit: item.uCom, conversion: item.conversion || 1, unitCost, unitSalePrice, costTotal, revenue, grossProfit, itemIndex, documentKey: document.key, documentNumber: document.number, participant: document.dest?.name || document.participant, cfop: item.cfop, value: revenue });
+      }
+      products[resolution.key] = product;
+    });
+  });
+  state.products = products;
+  state.movements = movements.sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+  state.suppliers = suppliers;
+  state.customers = customers;
+}
+
 function participantFrom(node) {
   const address = node?.getElementsByTagName("enderEmit")?.[0] || node?.getElementsByTagName("enderDest")?.[0];
   return {
@@ -206,6 +334,7 @@ async function loadRemoteState() {
     .maybeSingle();
   if (!error && data?.data) state = { ...state, ...data.data, auth: { ...state.auth, ...(data.data.auth || {}), loggedIn: true } };
   state.fiemg = { ...structuredClone(initialState.fiemg), ...(state.fiemg || {}) };
+  rebuildFiscalLedger();
   await loadFiemgRemote(true);
 }
 
@@ -351,7 +480,7 @@ function parseNfe(xmlText) {
     return {
       code: text(prod, "cProd"),
       ean: text(prod, "cEAN") || "SEM GTIN",
-      eanTrib: text(prod, "cEANTrib") || text(prod, "cEAN") || text(prod, "cProd") || "SEM GTIN",
+      eanTrib: text(prod, "cEANTrib") || text(prod, "cEAN") || "SEM GTIN",
       description: text(prod, "xProd"),
       ncm: text(prod, "NCM"),
       cest: text(prod, "CEST"),
@@ -399,88 +528,7 @@ function importNfe(xmlText, sourceName = "arquivo XML") {
   const importedAt = new Date().toISOString();
   state.documents.unshift({ ...document, batchId, sourceName, importedAt });
   state.batches.unshift({ id: batchId, sourceName, importedAt, status: "processado", items: document.items.length, key: document.key });
-
-  if (document.type === "entrada") state.suppliers[document.emit.cnpj] = { ...document.emit, lastDocument: document.number, lastDate: document.issuedAt };
-  if (document.type === "saida") state.customers[document.dest.cnpj] = { ...document.dest, lastDocument: document.number, lastDate: document.issuedAt };
-
-  document.items.forEach((item) => {
-    const productKey = item.eanTrib || item.ean || item.code;
-    const existing = state.products[productKey] || {
-      key: productKey,
-      ean: item.ean,
-      eanTrib: item.eanTrib,
-      internalCode: item.code,
-      description: item.description,
-      ncm: item.ncm,
-      cest: item.cest,
-      uTrib: item.uTrib,
-      stock: 0,
-      totalCost: 0,
-      documents: 0,
-      lastPurchase: "",
-      lastPurchasePrice: 0,
-      validity: "",
-      purchaseHistory: [],
-      salePrice: 0,
-      category: "Mercadorias",
-      brand: "",
-      origin: "NACIONAL",
-      cfop: item.cfop,
-    };
-
-    const fiscalQuantity = document.type === "entrada" ? item.fiscalQuantity : item.qTrib;
-    const fiscalUnit = document.type === "entrada" ? item.fiscalUnit : item.uTrib;
-    const movementQty = fiscalQuantity * (document.type === "entrada" ? 1 : -1);
-    existing.stock += movementQty;
-    existing.description = item.description || existing.description;
-    existing.ncm = item.ncm || existing.ncm;
-    existing.cest = item.cest || existing.cest;
-    existing.ean = item.ean || existing.ean;
-    existing.eanTrib = item.eanTrib || existing.eanTrib;
-    existing.internalCode = item.code || existing.internalCode;
-    existing.uTrib = fiscalUnit || existing.uTrib;
-    existing.cfop = item.cfop || existing.cfop;
-
-    if (document.type === "entrada") {
-      existing.totalCost += item.vProd;
-      existing.documents += 1;
-      existing.lastPurchase = document.issuedAt;
-      existing.lastPurchasePrice = item.unitCost || 0;
-      existing.purchaseHistory.unshift({
-        date: document.issuedAt,
-        supplier: document.emit.name,
-        supplierCnpj: document.emit.cnpj,
-        quantity: fiscalQuantity,
-        unitCost: existing.lastPurchasePrice,
-        total: item.vProd,
-        documentKey: document.key,
-        itemIndex: document.items.indexOf(item),
-        commercialQuantity: item.qCom,
-        commercialUnit: item.uCom,
-        conversion: item.conversion,
-      });
-    }
-
-    state.products[productKey] = existing;
-    state.movements.unshift({
-      id: crypto.randomUUID(),
-      date: document.issuedAt,
-      type: document.type,
-      productKey,
-      product: item.description,
-      quantity: movementQty,
-      unit: fiscalUnit,
-      commercialQuantity: item.qCom,
-      commercialUnit: item.uCom,
-      conversion: item.conversion,
-      unitCost: document.type === "entrada" ? item.unitCost : 0,
-      itemIndex: document.items.indexOf(item),
-      documentKey: document.key,
-      documentNumber: document.number,
-      cfop: item.cfop,
-      value: item.vProd,
-    });
-  });
+  rebuildFiscalLedger();
 
   saveState();
   render();
@@ -505,7 +553,9 @@ function render() {
   renderDocuments();
   renderProposal();
   renderFiemg();
+  renderFinancial();
   window.renderWorkspace?.();
+  enhanceResponsiveTables();
 }
 
 function renderKpis() {
@@ -514,12 +564,14 @@ function renderKpis() {
   const entries = documents.filter((doc) => doc.type === "entrada");
   const exits = documents.filter((doc) => doc.type === "saida");
   const fiemgOpen = state.fiemg.opportunities.filter((item) => item.status !== "Não participar" && item.status !== "Proposta enviada" && item.portalGroup !== "Encerrado").length;
-  const stockUnits = products.reduce((sum, product) => sum + Number(product.stock || 0), 0);
-  const stockValue = products.reduce((sum, product) => sum + Math.max(Number(product.stock || 0), 0) * Number(product.lastPurchasePrice || 0), 0);
+  const stockedProducts = products.filter((product) => Number(product.stock || 0) > 0);
+  const stockUnits = stockedProducts.reduce((sum, product) => sum + Number(product.stock || 0), 0);
+  const stockValue = stockedProducts.reduce((sum, product) => sum + Number(product.stock || 0) * Number(product.averageCost || product.lastPurchasePrice || 0), 0);
+  const grossProfit = state.movements.filter((movement) => movement.type === "saida").reduce((sum, movement) => sum + Number(movement.grossProfit || 0), 0);
   const cards = [
-    ["Saldo fiscal", number.format(stockUnits), "Unidades em estoque", "boxes"],
-    ["Valor em estoque", money.format(stockValue), "Pelo último custo de compra", "wallet"],
-    ["Notas de entrada", entries.length, `${exits.length} notas de saída`, "file-text"],
+    ["Itens em estoque", number.format(stockedProducts.length), `${number.format(stockUnits)} unidades disponíveis`, "boxes"],
+    ["Valor em estoque", money.format(stockValue), "Pelo custo médio de compra", "wallet"],
+    ["Resultado bruto", money.format(grossProfit), `${entries.length} entradas · ${exits.length} saídas`, "chart-no-axes-combined"],
     ["Oportunidades", fiemgOpen, "Em acompanhamento na FIEMG", "briefcase-business"],
   ];
   document.getElementById("kpi-grid").innerHTML = cards.map(([label, value, hint, icon]) => `
@@ -532,9 +584,9 @@ function renderMovements() {
     <tr>
       <td>${formatDate(movement.date)}</td>
       <td class="${movement.type === "entrada" ? "positive" : "negative"}">${movement.type}</td>
-      <td>${movement.product}</td>
-      <td>${number.format(movement.quantity)} ${movement.unit}</td>
-      <td>NF-e ${movement.documentNumber}<br><small>${maskKey(movement.documentKey)}</small></td>
+      <td>${escapeHtml(movement.product)}</td>
+      <td>${number.format(movement.quantity)} ${escapeHtml(movement.unit)}</td>
+      <td>NF-e ${escapeHtml(movement.documentNumber)}<br><small>${maskKey(movement.documentKey)}</small></td>
     </tr>
   `);
   document.getElementById("movement-rows").innerHTML = rows.join("") || emptyRow(5, "Nenhuma movimentação importada ainda.");
@@ -543,26 +595,28 @@ function renderMovements() {
 function renderStock() {
   const rows = Object.values(state.products).map((product) => `
     <tr>
-      <td><strong>${product.description}</strong><br><small>${product.purchaseHistory?.[0]?.supplier || "Sem compra registrada"}</small></td>
-      <td>${product.ean}</td>
-      <td>${product.eanTrib}</td>
-      <td>${product.ncm || "-"}</td>
-      <td>${product.cest || "-"}</td>
-      <td>${number.format(product.stock || 0)} ${product.uTrib || "un"}</td>
+      <td><strong>${escapeHtml(product.description)}</strong><br><small>${escapeHtml(product.purchaseHistory?.[0]?.supplier || "Sem compra registrada")}</small></td>
+      <td>${escapeHtml(product.ean)}</td>
+      <td>${escapeHtml(product.eanTrib)}</td>
+      <td>${escapeHtml(product.ncm || "-")}</td>
+      <td>${escapeHtml(product.cest || "-")}</td>
+      <td>${number.format(product.stock || 0)} ${escapeHtml(product.uTrib || "un")}</td>
       <td><strong>${money.format(product.lastPurchasePrice || 0)}</strong><br><small>por ${escapeHtml(product.uTrib || "un")}</small></td>
+      <td><strong>${money.format(product.salePrice || 0)}</strong><br><small>última venda</small></td>
       <td>${formatDate(product.lastPurchase)}</td>
-      <td><input class="stock-input validity-input" data-product="${product.key}" type="date" value="${product.validity || ""}" /></td>
+      <td><input class="stock-input validity-input" data-product="${escapeHtml(product.key)}" type="date" value="${escapeHtml(product.validity || "")}" /></td>
     </tr>
   `);
-  document.getElementById("stock-rows").innerHTML = rows.join("") || emptyRow(9, "Importe XMLs de entrada para formar o estoque fiscal.");
+  document.getElementById("stock-rows").innerHTML = rows.join("") || emptyRow(10, "Importe XMLs de entrada para formar o estoque fiscal.");
 }
 
 function renderProducts() {
   const cards = Object.values(state.products).map((product) => `
     <article class="product-card">
-      <strong>${product.description}</strong>
-      <span>${product.eanTrib}</span>
-      <small>Compra ${money.format(product.lastPurchasePrice || 0)} · Estoque ${number.format(product.stock || 0)} ${product.uTrib || "un"} · Validade ${product.validity ? formatDate(product.validity) : "não informada"}</small>
+      <strong>${escapeHtml(product.description)}</strong>
+      <span>${escapeHtml(product.eanTrib)}</span>
+      <small>Compra ${money.format(product.lastPurchasePrice || 0)} · Venda ${money.format(product.salePrice || 0)} · Estoque ${number.format(product.stock || 0)} ${escapeHtml(product.uTrib || "un")} · Validade ${product.validity ? formatDate(product.validity) : "não informada"}</small>
+      ${product.aliases?.length ? `<small class="reconciliation-note"><i data-lucide="link-2"></i> ${product.aliases.length} descrição de saída conciliada</small>` : ""}
     </article>
   `);
   document.getElementById("product-cards").innerHTML = cards.join("") || `<p class="empty-state">O cadastro mestre será criado automaticamente pelo GTIN/EAN dos XMLs.</p>`;
@@ -572,9 +626,9 @@ function renderDocuments() {
   const rows = state.documents.map((doc) => `
     <tr>
       <td class="${doc.type === "entrada" ? "positive" : "negative"}">${doc.type}</td>
-      <td>${doc.number}/${doc.series}</td>
+      <td>${escapeHtml(doc.number)}/${escapeHtml(doc.series)}</td>
       <td>${formatDate(doc.issuedAt)}</td>
-      <td>${doc.participant}</td>
+      <td>${escapeHtml(doc.participant)}</td>
       <td>${maskKey(doc.key)}</td>
       <td>${money.format(doc.total)}</td>
     </tr>
@@ -584,10 +638,10 @@ function renderDocuments() {
 
 function renderImportResult(doc) {
   document.getElementById("import-result").innerHTML = `
-    <div class="section-heading"><span>XML processado</span><h2>NF-e ${doc.number}/${doc.series} importada como ${doc.type}</h2></div>
+    <div class="section-heading"><span>XML processado</span><h2>NF-e ${escapeHtml(doc.number)}/${escapeHtml(doc.series)} importada como ${escapeHtml(doc.type)}</h2></div>
     <div class="result-grid">
       <div><span>Chave</span><strong>${maskKey(doc.key)}</strong></div>
-      <div><span>Participante</span><strong>${doc.participant}</strong></div>
+      <div><span>Participante</span><strong>${escapeHtml(doc.participant)}</strong></div>
       <div><span>Data</span><strong>${formatDate(doc.issuedAt)}</strong></div>
       <div><span>Total</span><strong>${money.format(doc.total)}</strong></div>
     </div>
@@ -606,13 +660,14 @@ function renderImportResult(doc) {
         </tbody>
       </table>
     </div>`;
+  enhanceResponsiveTables(document.getElementById("import-result"));
 }
 
 function renderProposal() {
   const rows = state.currentProposal.items.map((item, index) => `
     <tr>
-      <td>${item.code || "-"}</td>
-      <td>${item.description}</td>
+      <td>${escapeHtml(item.code || "-")}</td>
+      <td>${escapeHtml(item.description)}</td>
       <td>${number.format(item.quantity)}</td>
       <td>${money.format(item.unitPrice)}</td>
       <td>${money.format(item.quantity * item.unitPrice)}</td>
@@ -623,17 +678,53 @@ function renderProposal() {
   document.getElementById("proposal-rows").innerHTML = rows.join("") || emptyRow(6, "Adicione itens pelo EAN/GTIN ou manualmente.");
   document.getElementById("proposal-total").textContent = money.format(total);
   document.getElementById("saved-proposal-rows").innerHTML = state.proposals.map((proposal) => `
-    <tr><td>${proposal.number}</td><td>${proposal.customer}</td><td>${formatDate(proposal.createdAt)}</td><td>${formatDate(proposal.validity)}</td><td>${money.format(proposal.total)}</td></tr>
+    <tr><td>${escapeHtml(proposal.number)}</td><td>${escapeHtml(proposal.customer)}</td><td>${formatDate(proposal.createdAt)}</td><td>${formatDate(proposal.validity)}</td><td>${money.format(proposal.total)}</td></tr>
   `).join("") || emptyRow(5, "Nenhuma proposta salva.");
   window.renderWorkspace?.();
 }
+
+function renderFinancial() {
+  const container = document.getElementById("finance-kpis");
+  if (!container) return;
+  const purchases = state.documents.filter((document) => document.type === "entrada").reduce((sum, document) => sum + Number(document.total || 0), 0);
+  const sales = state.documents.filter((document) => document.type === "saida").reduce((sum, document) => sum + Number(document.total || 0), 0);
+  const costOfSales = state.movements.filter((movement) => movement.type === "saida").reduce((sum, movement) => sum + Number(movement.costTotal || 0), 0);
+  const grossProfit = sales - costOfSales;
+  const margin = sales > 0 ? grossProfit / sales * 100 : 0;
+  const cards = [
+    ["Entradas por vendas", money.format(sales), "Receita das NF-e de saída", "arrow-down-left"],
+    ["Saídas por compras", money.format(purchases), "Valor das NF-e de entrada", "arrow-up-right"],
+    ["Custo das vendas", money.format(costOfSales), "Custo médio dos produtos vendidos", "package-check"],
+    ["Lucro bruto", money.format(grossProfit), `${number.format(margin)}% de margem bruta`, "chart-no-axes-combined"],
+  ];
+  container.innerHTML = cards.map(([label, value, hint, icon]) => `<article class="kpi-card"><span>${label}<i data-lucide="${icon}"></i></span><strong>${value}</strong><small>${hint}</small></article>`).join("");
+  const rows = [...state.documents].sort((a, b) => String(b.issuedAt || "").localeCompare(String(a.issuedAt || ""))).map((document) => {
+    const documentMovements = state.movements.filter((movement) => movement.documentKey === document.key);
+    const revenue = document.type === "saida" ? Number(document.total || 0) : 0;
+    const outflow = document.type === "entrada" ? Number(document.total || 0) : 0;
+    const cost = documentMovements.reduce((sum, movement) => sum + Number(movement.costTotal || 0), 0);
+    const profit = document.type === "saida" ? revenue - cost : 0;
+    return `<tr><td>${formatDate(document.issuedAt)}</td><td><strong>NF-e ${escapeHtml(document.number)}/${escapeHtml(document.series)}</strong><br><small>${escapeHtml(document.participant || "-")}</small></td><td class="${document.type === "saida" ? "positive" : "negative"}">${document.type === "saida" ? "Venda" : "Compra"}</td><td>${money.format(revenue)}</td><td>${money.format(outflow)}</td><td><strong>${document.type === "saida" ? money.format(cost) : "-"}</strong></td><td class="${profit >= 0 ? "positive" : "negative"}">${document.type === "saida" ? money.format(profit) : "-"}</td></tr>`;
+  });
+  document.getElementById("finance-rows").innerHTML = rows.join("") || emptyRow(7, "Importe XMLs de entrada e saída para formar o financeiro fiscal.");
+}
+
+function enhanceResponsiveTables(root = document) {
+  root.querySelectorAll(".table-wrap table").forEach((table) => {
+    table.closest(".table-wrap")?.classList.add("responsive-table");
+    const labels = [...table.querySelectorAll("thead th")].map((header) => header.textContent.trim());
+    table.querySelectorAll("tbody tr").forEach((row) => [...row.children].forEach((cell, index) => {
+      if (!cell.classList.contains("empty-state")) cell.dataset.label = labels[index] || "Detalhe";
+    }));
+  });
+}
+window.enhanceResponsiveTables = enhanceResponsiveTables;
 
 function updateFiscalConversion(documentKey, itemIndex, factor) {
   const doc = state.documents.find((entry) => entry.key === documentKey);
   if (!doc || doc.type !== "entrada") return showToast("Não encontrei a nota de entrada para ajustar.");
   const item = doc.items[itemIndex];
   if (!item || !Number.isFinite(factor) || factor <= 0) return showToast("Informe um fator de conversão válido.");
-  const oldQuantity = Number(item.fiscalQuantity || item.qTrib || item.qCom || 0);
   const newQuantity = item.qCom * factor;
   if (newQuantity <= 0) return showToast("A quantidade fiscal precisa ser maior que zero.");
   item.conversion = factor;
@@ -642,17 +733,7 @@ function updateFiscalConversion(documentKey, itemIndex, factor) {
   item.unitCost = item.vProd / newQuantity;
   item.conversionSource = "manual";
   item.conversionNeedsReview = false;
-  const productKey = item.eanTrib || item.ean || item.code;
-  const product = state.products[productKey];
-  if (product) {
-    product.stock += newQuantity - oldQuantity;
-    product.uTrib = item.fiscalUnit;
-    product.lastPurchasePrice = item.unitCost;
-    const history = product.purchaseHistory?.find((entry) => entry.documentKey === doc.key && entry.itemIndex === itemIndex);
-    if (history) Object.assign(history, { quantity: newQuantity, unitCost: item.unitCost, conversion: factor });
-  }
-  const movement = state.movements.find((entry) => entry.documentKey === doc.key && entry.itemIndex === itemIndex);
-  if (movement) Object.assign(movement, { quantity: newQuantity, unit: item.fiscalUnit, conversion: factor, unitCost: item.unitCost });
+  rebuildFiscalLedger();
   saveState();
   render();
   renderImportResult(doc);
@@ -1110,6 +1191,8 @@ if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(() => {}));
 }
 
+rebuildFiscalLedger();
+localStorage.setItem("nathaliaFiscalState", JSON.stringify(state));
 renderAuth();
 render();
 initSupabase();

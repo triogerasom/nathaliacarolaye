@@ -1,5 +1,5 @@
 /* Presentation and navigation shared by the existing fiscal modules. */
-const navigationIcons = { dashboard: "layout-dashboard", importar: "file-up", estoque: "boxes", produtos: "package", documentos: "arrow-left-right", propostas: "file-pen-line", integracoes: "briefcase-business", exportar: "sheet", plataforma: "building-2", auditoria: "history" };
+const navigationIcons = { dashboard: "layout-dashboard", importar: "file-up", estoque: "boxes", produtos: "package", documentos: "arrow-left-right", propostas: "file-pen-line", financeiro: "landmark", integracoes: "briefcase-business", exportar: "sheet", plataforma: "building-2", auditoria: "history" };
 document.querySelectorAll(".nav-item").forEach((button) => {
   const icon = document.createElement("i");
   icon.dataset.lucide = navigationIcons[button.dataset.view];
@@ -55,6 +55,7 @@ addListSearch("produtos", "product-cards", "Buscar produto ou EAN");
 addListSearch("documentos", "document-rows", "Buscar nota ou participante", true);
 addListSearch("integracoes", "fiemg-rows", "Buscar processo, objeto ou entidade");
 addListSearch("propostas", "saved-proposal-rows", "Buscar proposta ou cliente");
+addListSearch("financeiro", "finance-rows", "Buscar nota, participante ou operação");
 
 window.renderWorkspace = function () {
   document.getElementById("overview-date").textContent = new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
@@ -81,6 +82,7 @@ window.renderWorkspace = function () {
   const regional = Number(coverage.regional || 0);
   serverDetail.textContent = state.fiemg.serverSyncError || (sync?.last_success_at ? `Última conclusão: ${new Date(sync.last_success_at).toLocaleString("pt-BR")} · ${retained} processos cobertos · ${regional} regionais · ${sync.item_count} itens atualizados.` : sync?.message || "Nenhuma execução automática confirmada ainda.");
   listFilters.forEach((apply) => apply());
+  window.enhanceResponsiveTables?.();
   window.lucide?.createIcons();
 };
 

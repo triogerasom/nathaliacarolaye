@@ -72,6 +72,7 @@
           <button class="nav-item" data-view="documentos" type="button">Entradas e saídas</button>
           <span class="nav-group">Comercial</span>
           <button class="nav-item" data-view="propostas" type="button">Propostas</button>
+          <button class="nav-item" data-view="financeiro" type="button">Financeiro</button>
           <button class="nav-item" data-view="integracoes" type="button">Compras FIEMG</button>
           <button class="nav-item" data-view="exportar" type="button">Sebrae NFe</button>
           <span class="nav-group">Organização</span>
@@ -192,6 +193,7 @@
                     <th>CEST</th>
                     <th>Qtd. fiscal</th>
                     <th>Preço compra</th>
+                    <th>Preço venda</th>
                     <th>Data compra</th>
                     <th>Validade</th>
                   </tr>
@@ -275,6 +277,29 @@
                   </tr>
                 </thead>
                 <tbody id="saved-proposal-rows"></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+
+        <section class="view" id="financeiro">
+          <section class="overview-heading">
+            <div>
+              <h2>Financeiro fiscal</h2>
+              <p>Entradas, saídas e resultado calculados pelas notas importadas.</p>
+            </div>
+          </section>
+          <div class="kpi-grid finance-kpis" id="finance-kpis"></div>
+          <section class="panel">
+            <div class="section-heading">
+              <span>Resultado por documento</span>
+              <h2>Movimentação financeira</h2>
+            </div>
+            <p class="muted-copy finance-note">Visão fiscal: compras representam saídas previstas e vendas representam entradas previstas. O lucro bruto considera o custo médio dos produtos vendidos.</p>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Data</th><th>Documento</th><th>Operação</th><th>Entrada</th><th>Saída</th><th>Custo</th><th>Lucro bruto</th></tr></thead>
+                <tbody id="finance-rows"></tbody>
               </table>
             </div>
           </section>
@@ -423,7 +448,7 @@
                 <article class="module-card"><strong>Propostas comerciais</strong><span>Disponível</span></article>
                 <article class="module-card"><strong>Compras FIEMG</strong><span>Disponível</span></article>
                 <article class="module-card"><strong>Vendas e pedidos</strong><span>Planejado</span></article>
-                <article class="module-card"><strong>Financeiro</strong><span>Planejado</span></article>
+                <article class="module-card active"><strong>Financeiro fiscal</strong><span>Disponível</span></article>
                 <article class="module-card"><strong>Relatórios gerenciais</strong><span>Planejado</span></article>
               </div>
             </div>
