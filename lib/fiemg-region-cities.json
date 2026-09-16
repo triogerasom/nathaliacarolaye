@@ -1,0 +1,734 @@
+{
+  "source": "https://github.com/kelvins/municipios-brasileiros",
+  "radiusKm": 50,
+  "centers": [
+    {
+      "codigo_ibge": 3127701,
+      "nome": "Governador Valadares",
+      "latitude": -18.8545,
+      "longitude": -41.9555,
+      "capital": 0,
+      "codigo_uf": 31,
+      "siafi_id": 4553,
+      "ddd": 33,
+      "fuso_horario": "America/Sao_Paulo"
+    },
+    {
+      "codigo_ibge": 3131307,
+      "nome": "Ipatinga",
+      "latitude": -19.4703,
+      "longitude": -42.5476,
+      "capital": 0,
+      "codigo_uf": 31,
+      "siafi_id": 4625,
+      "ddd": 31,
+      "fuso_horario": "America/Sao_Paulo"
+    }
+  ],
+  "cities": [
+    {
+      "id": 3100500,
+      "name": "Açucena",
+      "lat": -19.0671,
+      "lon": -42.5419,
+      "distances": [
+        {
+          "center": "Governador Valadares",
+          "km": 66.04
+        },
+        {
+          "center": "Ipatinga",
+          "km": 44.84
+        }
+      ]
+    },
+    {
+      "id": 3101805,
+      "name": "Alpercata",
+      "lat": -18.974,
+      "lon": -41.97,
+      "distances": [
+        {
+          "center": "Governador Valadares",
+          "km": 13.38
+        },
+        {
+          "center": "Ipatinga",
+          "km": 82
+        }
+      ]
+    },
+    {
+      "id": 3103009,
+      "name": "Antônio Dias",
+      "lat": -19.6491,
+      "lon": -42.8732,
+      "distances": [
+        {
+          "center": "Governador Valadares",
+          "km": 130.72
+        },
+        {
+          "center": "Ipatinga",
+          "km": 39.49
+        }
+      ]
+    },
+    {
+      "id": 3106309,
+      "name": "Belo Oriente",
+      "lat": -19.2199,
+      "lon": -42.4828,
+      "distances": [
+        {
+          "center": "Governador Valadares",
+          "km": 68.72
+        },
+        {
+          "center": "Ipatinga",
+          "km": 28.66
+        }
+      ]
+    },
+    {
+      "id": 3107802,
+      "name": "Bom Jesus do Galho",
+      "lat": -19.836,
+      "lon": -42.3165,
+      "distances": [
+        {
+          "center": "Governador Valadares",
+          "km": 115.52
+        },
+        {
+          "center": "Ipatinga",
+          "km": 47.32
+        }
+      ]
+    },
+    {
+      "id": 3108800,
+      "name": "Braúnas",
+      "lat": -19.0562,
+      "lon": -42.7099,
+      "distances": [
+        {
+          "center": "Governador Valadares",
+          "km": 82.45
+        },
+        {
+          "center": "Ipatinga",
+          "km": 49.1
+        }
+      ]
+    },
+    {
+      "id": 3109253,
+      "name": "Bugre",
+      "lat": -19.4231,
+      "lon": -42.2552,
+      "distances": [
+        {
+          "center": "Governador Valadares",
+          "km": 70.63
+        },
+        {
+          "center": "Ipatinga",
+          "km": 31.1
+        }
+      ]
+    },
+    {
+      "id": 3112653,
+      "name": "Capitão Andrade",
+      "lat": -19.0748,
+      "lon": -41.8614,
+      "distances": [
+        {
+          "center": "Governador Valadares",
+          "km": 26.42
+        },
+        {
+          "center": "Ipatinga",
+          "km": 84.39
+        }
+      ]
+    },
+    {
+      "id": 3119203,
+      "name": "Coroaci",
+      "lat": -18.6156,
+      "lon": -42.2791,
+      "distances": [
+        {
+          "center": "Governador Valadares",
+          "km": 43.21
+        },
+        {
+          "center": "Ipatinga",
+          "km": 99.14
+        }
+      ]
+    },
+    {
+      "id": 3119401,
+      "name": "Coronel Fabriciano",
+      "lat": -19.5179,
+      "lon": -42.6276,
+      "distances": [
+        {
+          "center": "Governador Valadares",
+          "km": 102.1
+        },
+        {
+          "center": "Ipatinga",
+          "km": 9.92
+        }
+      ]
+    },
+    {
+      "id": 3120003,
+      "name": "Córrego Novo",
+      "lat": -19.8361,
+      "lon": -42.3988,
+      "distances": [
+        {
+          "center": "Governador Valadares",
+          "km": 118.64
+        },
+        {
+          "center": "Ipatinga",
+          "km": 43.56
+        }
+      ]
+    },
+    {
+      "id": 3121803,
+      "name": "Dionísio",
+      "lat": -19.8433,
+      "lon": -42.7701,
+      "distances": [
+        {
+          "center": "Governador Valadares",
+          "km": 139.26
+        },
+        {
+          "center": "Ipatinga",
+          "km": 47.57
+        }
+      ]
+    },
+    {
+      "id": 3122504,
+      "name": "Dom Cavati",
+      "lat": -19.3735,
+      "lon": -42.1121,
+      "distances": [
+        {
+          "center": "Governador Valadares",
+          "km": 60.01
+        },
+        {
+          "center": "Ipatinga",
+          "km": 46.92
+        }
+      ]
+    },
+    {
+      "id": 3123700,
+      "name": "Engenheiro Caldas",
+      "lat": -19.2065,
+      "lon": -42.0503,
+      "distances": [
+        {
+          "center": "Governador Valadares",
+          "km": 40.39
+        },
+        {
+          "center": "Ipatinga",
+          "km": 59.86
+        }
+      ]
+    },
+    {
+      "id": 3123858,
+      "name": "Entre Folhas",
+      "lat": -19.6218,
+      "lon": -42.2306,
+      "distances": [
+        {
+          "center": "Governador Valadares",
+          "km": 90.08
+        },
+        {
+          "center": "Ipatinga",
+          "km": 37.25
+        }
+      ]
+    },
+    {
+      "id": 3125804,
+      "name": "Fernandes Tourinho",
+      "lat": -19.1541,
+      "lon": -42.0803,
+      "distances": [
+        {
+          "center": "Governador Valadares",
+          "km": 35.8
+        },
+        {
+          "center": "Ipatinga",
+          "km": 60.34
+        }
+      ]
+    },
+    {
+      "id": 3126901,
+      "name": "Frei Inocêncio",
+      "lat": -18.5556,
+      "lon": -41.9121,
+      "distances": [
+        {
+          "center": "Governador Valadares",
+          "km": 33.55
+        },
+        {
+          "center": "Ipatinga",
+          "km": 121.69
+        }
+      ]
+    },
+    {
+      "id": 3127305,
+      "name": "Galiléia",
+      "lat": -19.0005,
+      "lon": -41.5387,
+      "distances": [
+        {
+          "center": "Governador Valadares",
+          "km": 46.75
+        },
+        {
+          "center": "Ipatinga",
+          "km": 118.1
+        }
+      ]
+    },
+    {
+      "id": 3127701,
+      "name": "Governador Valadares",
+      "lat": -18.8545,
+      "lon": -41.9555,
+      "distances": [
+        {
+          "center": "Governador Valadares",
+          "km": 0
+        },
+        {
+          "center": "Ipatinga",
+          "km": 92.5
+        }
+      ]
+    },
+    {
+      "id": 3129301,
+      "name": "Iapu",
+      "lat": -19.4387,
+      "lon": -42.2147,
+      "distances": [
+        {
+          "center": "Governador Valadares",
+          "km": 70.44
+        },
+        {
+          "center": "Ipatinga",
+          "km": 35.08
+        }
+      ]
+    },
+    {
+      "id": 3130903,
+      "name": "Inhapim",
+      "lat": -19.5476,
+      "lon": -42.1147,
+      "distances": [
+        {
+          "center": "Governador Valadares",
+          "km": 78.86
+        },
+        {
+          "center": "Ipatinga",
+          "km": 46.18
+        }
+      ]
+    },
+    {
+      "id": 3131158,
+      "name": "Ipaba",
+      "lat": -19.4158,
+      "lon": -42.4139,
+      "distances": [
+        {
+          "center": "Governador Valadares",
+          "km": 78.83
+        },
+        {
+          "center": "Ipatinga",
+          "km": 15.27
+        }
+      ]
+    },
+    {
+      "id": 3131307,
+      "name": "Ipatinga",
+      "lat": -19.4703,
+      "lon": -42.5476,
+      "distances": [
+        {
+          "center": "Governador Valadares",
+          "km": 92.5
+        },
+        {
+          "center": "Ipatinga",
+          "km": 0
+        }
+      ]
+    },
+    {
+      "id": 3133204,
+      "name": "Itanhomi",
+      "lat": -19.1736,
+      "lon": -41.863,
+      "distances": [
+        {
+          "center": "Governador Valadares",
+          "km": 36.79
+        },
+        {
+          "center": "Ipatinga",
+          "km": 79.05
+        }
+      ]
+    },
+    {
+      "id": 3135001,
+      "name": "Jaguaraçu",
+      "lat": -19.647,
+      "lon": -42.7498,
+      "distances": [
+        {
+          "center": "Governador Valadares",
+          "km": 121.32
+        },
+        {
+          "center": "Ipatinga",
+          "km": 28.89
+        }
+      ]
+    },
+    {
+      "id": 3135076,
+      "name": "Jampruca",
+      "lat": -18.461,
+      "lon": -41.809,
+      "distances": [
+        {
+          "center": "Governador Valadares",
+          "km": 46.4
+        },
+        {
+          "center": "Ipatinga",
+          "km": 136.48
+        }
+      ]
+    },
+    {
+      "id": 3136108,
+      "name": "Joanésia",
+      "lat": -19.1729,
+      "lon": -42.6775,
+      "distances": [
+        {
+          "center": "Governador Valadares",
+          "km": 83.75
+        },
+        {
+          "center": "Ipatinga",
+          "km": 35.77
+        }
+      ]
+    },
+    {
+      "id": 3140100,
+      "name": "Marilac",
+      "lat": -18.5079,
+      "lon": -42.0822,
+      "distances": [
+        {
+          "center": "Governador Valadares",
+          "km": 40.79
+        },
+        {
+          "center": "Ipatinga",
+          "km": 117.67
+        }
+      ]
+    },
+    {
+      "id": 3140308,
+      "name": "Marliéria",
+      "lat": -19.7096,
+      "lon": -42.7327,
+      "distances": [
+        {
+          "center": "Governador Valadares",
+          "km": 125.28
+        },
+        {
+          "center": "Ipatinga",
+          "km": 32.92
+        }
+      ]
+    },
+    {
+      "id": 3171501,
+      "name": "Mathias Lobato",
+      "lat": -18.59,
+      "lon": -41.9166,
+      "distances": [
+        {
+          "center": "Governador Valadares",
+          "km": 29.69
+        },
+        {
+          "center": "Ipatinga",
+          "km": 118.24
+        }
+      ]
+    },
+    {
+      "id": 3141702,
+      "name": "Mesquita",
+      "lat": -19.224,
+      "lon": -42.6079,
+      "distances": [
+        {
+          "center": "Governador Valadares",
+          "km": 79.94
+        },
+        {
+          "center": "Ipatinga",
+          "km": 28.11
+        }
+      ]
+    },
+    {
+      "id": 3144359,
+      "name": "Naque",
+      "lat": -19.2291,
+      "lon": -42.3312,
+      "distances": [
+        {
+          "center": "Governador Valadares",
+          "km": 57.4
+        },
+        {
+          "center": "Ipatinga",
+          "km": 35.14
+        }
+      ]
+    },
+    {
+      "id": 3149952,
+      "name": "Periquito",
+      "lat": -19.1573,
+      "lon": -42.2333,
+      "distances": [
+        {
+          "center": "Governador Valadares",
+          "km": 44.57
+        },
+        {
+          "center": "Ipatinga",
+          "km": 47.95
+        }
+      ]
+    },
+    {
+      "id": 3150539,
+      "name": "Pingo-d'Água",
+      "lat": -19.7287,
+      "lon": -42.4095,
+      "distances": [
+        {
+          "center": "Governador Valadares",
+          "km": 108.26
+        },
+        {
+          "center": "Ipatinga",
+          "km": 32.17
+        }
+      ]
+    },
+    {
+      "id": 3158953,
+      "name": "Santana do Paraíso",
+      "lat": -19.3661,
+      "lon": -42.5446,
+      "distances": [
+        {
+          "center": "Governador Valadares",
+          "km": 84.07
+        },
+        {
+          "center": "Ipatinga",
+          "km": 11.59
+        }
+      ]
+    },
+    {
+      "id": 3161601,
+      "name": "São Geraldo da Piedade",
+      "lat": -18.8411,
+      "lon": -42.2867,
+      "distances": [
+        {
+          "center": "Governador Valadares",
+          "km": 34.88
+        },
+        {
+          "center": "Ipatinga",
+          "km": 75.14
+        }
+      ]
+    },
+    {
+      "id": 3162609,
+      "name": "São João do Oriente",
+      "lat": -19.3384,
+      "lon": -42.1575,
+      "distances": [
+        {
+          "center": "Governador Valadares",
+          "km": 57.84
+        },
+        {
+          "center": "Ipatinga",
+          "km": 43.46
+        }
+      ]
+    },
+    {
+      "id": 3165503,
+      "name": "Sardoá",
+      "lat": -18.7828,
+      "lon": -42.3629,
+      "distances": [
+        {
+          "center": "Governador Valadares",
+          "km": 43.61
+        },
+        {
+          "center": "Ipatinga",
+          "km": 78.87
+        }
+      ]
+    },
+    {
+      "id": 3167707,
+      "name": "Sobrália",
+      "lat": -19.2345,
+      "lon": -42.0998,
+      "distances": [
+        {
+          "center": "Governador Valadares",
+          "km": 44.89
+        },
+        {
+          "center": "Ipatinga",
+          "km": 53.8
+        }
+      ]
+    },
+    {
+      "id": 3168408,
+      "name": "Tarumirim",
+      "lat": -19.2835,
+      "lon": -42.0097,
+      "distances": [
+        {
+          "center": "Governador Valadares",
+          "km": 48.04
+        },
+        {
+          "center": "Ipatinga",
+          "km": 60.13
+        }
+      ]
+    },
+    {
+      "id": 3168705,
+      "name": "Timóteo",
+      "lat": -19.5811,
+      "lon": -42.6471,
+      "distances": [
+        {
+          "center": "Governador Valadares",
+          "km": 108.63
+        },
+        {
+          "center": "Ipatinga",
+          "km": 16.14
+        }
+      ]
+    },
+    {
+      "id": 3169505,
+      "name": "Tumiritinga",
+      "lat": -18.9844,
+      "lon": -41.6527,
+      "distances": [
+        {
+          "center": "Governador Valadares",
+          "km": 34.97
+        },
+        {
+          "center": "Ipatinga",
+          "km": 108.38
+        }
+      ]
+    },
+    {
+      "id": 3170057,
+      "name": "Ubaporanga",
+      "lat": -19.6351,
+      "lon": -42.1059,
+      "distances": [
+        {
+          "center": "Governador Valadares",
+          "km": 88.22
+        },
+        {
+          "center": "Ipatinga",
+          "km": 49.78
+        }
+      ]
+    },
+    {
+      "id": 3170578,
+      "name": "Vargem Alegre",
+      "lat": -19.5988,
+      "lon": -42.2949,
+      "distances": [
+        {
+          "center": "Governador Valadares",
+          "km": 90.11
+        },
+        {
+          "center": "Ipatinga",
+          "km": 30.09
+        }
+      ]
+    }
+  ]
+}

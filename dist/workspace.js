@@ -76,7 +76,10 @@ window.renderWorkspace = function () {
   const delayed = sync?.last_success_at && Date.now() - Date.parse(sync.last_success_at) > 60 * 60 * 1000;
   serverBadge.classList.toggle("ready", sync?.status === "success" && !delayed);
   serverBadge.textContent = state.fiemg.serverSyncError ? "Consulta indisponível" : !sync ? "Aguardando primeira execução" : sync.status === "running" ? "Sincronizando no servidor" : sync.status === "error" ? "Falha na última execução" : delayed ? "Atualização atrasada" : "Automação ativa";
-  serverDetail.textContent = state.fiemg.serverSyncError || (sync?.last_success_at ? `Última conclusão: ${new Date(sync.last_success_at).toLocaleString("pt-BR")} · ${sync.process_count} processos · ${sync.item_count} itens.` : sync?.message || "Nenhuma execução automática confirmada ainda.");
+  const coverage = sync?.coverage || {};
+  const retained = Number(coverage.retained ?? sync?.process_count ?? 0);
+  const regional = Number(coverage.regional || 0);
+  serverDetail.textContent = state.fiemg.serverSyncError || (sync?.last_success_at ? `Última conclusão: ${new Date(sync.last_success_at).toLocaleString("pt-BR")} · ${retained} processos cobertos · ${regional} regionais · ${sync.item_count} itens atualizados.` : sync?.message || "Nenhuma execução automática confirmada ainda.");
   listFilters.forEach((apply) => apply());
   window.lucide?.createIcons();
 };

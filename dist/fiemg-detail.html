@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Processo FIEMG | Nathalia Carolayne</title>
+    <meta name="theme-color" content="#17191c" />
+    <link rel="icon" href="./assets/logo-nathalia.png" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body class="detail-page">
+    <header class="detail-topbar">
+      <a class="detail-brand" href="/">
+        <img src="./assets/logo-nathalia.png" alt="Nathalia Carolayne" />
+        <span><strong>Nathalia</strong><small>Central de Licitações</small></span>
+      </a>
+      <a class="secondary link-button" href="/"><i data-lucide="arrow-left"></i>Voltar à plataforma</a>
+    </header>
+
+    <main class="detail-workspace">
+      <section class="detail-state" id="detail-loading">
+        <span class="detail-spinner" aria-hidden="true"></span>
+        <strong>Consultando o processo na FIEMG</strong>
+        <p>O edital e os itens serão organizados nesta página.</p>
+      </section>
+      <section class="detail-state" id="detail-error" hidden>
+        <i data-lucide="circle-alert"></i>
+        <strong>Não foi possível abrir o processo</strong>
+        <p id="detail-error-message"></p>
+        <a class="primary link-button" href="/">Voltar à plataforma</a>
+      </section>
+
+      <div id="detail-content" hidden>
+        <section class="detail-hero">
+          <div>
+            <div class="detail-kicker"><span class="status-pill ready" id="detail-status"></span><span id="detail-cache"></span></div>
+            <h1 id="detail-process"></h1>
+            <p id="detail-object"></p>
+          </div>
+          <a class="secondary link-button" id="official-link" target="_blank" rel="noreferrer"><i data-lucide="external-link"></i>Abrir portal oficial</a>
+        </section>
+
+        <section class="detail-metadata" aria-label="Resumo do processo">
+          <div><span>Entidade</span><strong id="detail-entity"></strong></div>
+          <div><span>Modalidade</span><strong id="detail-modality"></strong></div>
+          <div><span>Fase</span><strong id="detail-phase"></strong></div>
+          <div><span>Início</span><strong id="detail-start"></strong></div>
+          <div><span>Encerramento</span><strong id="detail-deadline"></strong></div>
+          <div><span>Homologação</span><strong id="detail-homologated"></strong></div>
+        </section>
+
+        <section class="detail-section">
+          <div class="section-heading heading-actions">
+            <div><span>Documentos oficiais</span><h2>Edital e anexos</h2></div>
+            <strong class="detail-count" id="attachment-count"></strong>
+          </div>
+          <div class="attachment-list" id="attachment-list"></div>
+        </section>
+
+        <section class="detail-section">
+          <div class="section-heading heading-actions">
+            <div><span>Escopo completo</span><h2>Itens do processo</h2></div>
+            <strong class="detail-count" id="item-count"></strong>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Item</th><th>Descrição</th><th>Quantidade</th><th>Unidade</th><th>Referência unitária</th><th>Situação</th></tr></thead>
+              <tbody id="detail-items"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </main>
+    <script src="./vendor/lucide.min.js"></script>
+    <script type="module" src="./fiemg-detail.js"></script>
+  </body>
+</html>

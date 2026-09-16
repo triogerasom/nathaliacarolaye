@@ -158,7 +158,8 @@
                 <li>Entrada: CNPJ da empresa aparece como destinatário.</li>
                 <li>Saída: CNPJ da empresa aparece como emitente.</li>
                 <li>Duplicidade: chave de acesso importada uma única vez.</li>
-                <li>Conversão: compra em caixa vira unidade tributável quando qTrib vier no XML.</li>
+                <li>Conversão: qTrib/vUnTrib têm prioridade; caixas e fardos também são reconhecidos pela descrição e ficam disponíveis para conferência.</li>
+                <li>Custo: o preço de compra é recalculado por unidade fiscal após a conversão da embalagem.</li>
                 <li>XML original: mantido no registro do documento.</li>
                 <li>Validade: pode ser informada depois no estoque fiscal.</li>
               </ul>
@@ -327,7 +328,7 @@
                 <button class="primary" id="fiemg-import-button" type="submit">Importar processo</button>
                 <button class="secondary" id="fiemg-sync-button" type="button">Sincronizar mural</button>
               </form>
-              <div class="server-sync"><span class="status-pill" id="server-sync-state">Aguardando servidor</span><p id="server-sync-detail">Verificando a última execução automática.</p><small>Consulta programada dos 100 processos mais recentes a cada 15 minutos, mesmo com a plataforma fechada.</small></div>
+              <div class="server-sync"><span class="status-pill" id="server-sync-state">Aguardando servidor</span><p id="server-sync-detail">Verificando a última execução automática.</p><small>A cada 15 minutos: últimos 100 processos e oportunidades identificadas em municípios a até 50 km de Ipatinga ou Governador Valadares, incluindo homologados nos últimos 8 meses.</small></div>
               <hr class="soft-separator" />
               <details class="manual-entry"><summary>Cadastrar oportunidade manualmente</summary>
               <form class="proposal-form" id="fiemg-form">

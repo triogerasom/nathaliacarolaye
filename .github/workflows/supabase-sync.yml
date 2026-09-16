@@ -8,6 +8,7 @@ on:
       - "supabase/**/*.sql"
       - "scripts/sync-fiemg.cjs"
       - "api/fiemg-import.js"
+      - "lib/fiemg*"
       - ".github/workflows/supabase-sync.yml"
   workflow_dispatch:
   schedule:
@@ -24,7 +25,7 @@ jobs:
   sync:
     name: Aplicar SQL no Supabase
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 25
 
     steps:
       - name: Baixar repositório

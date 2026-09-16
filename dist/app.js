@@ -112,6 +112,41 @@ function onlyDigits(value) {
   return String(value || "").replace(/\D/g, "");
 }
 
+function isPackageUnit(value) {
+  return /^(CX|CAIXA|FD|FARDO|PCT|PACOTE|KIT|DISPLAY|DP|PACK)$/i.test(String(value || "").trim());
+}
+
+function packageCountFromDescription(description) {
+  const value = String(description || "").toUpperCase();
+  const patterns = [
+    /(?:CX|CAIXA|FD|FARDO|PCT|PACOTE|KIT|DISPLAY|PACK)\s*(?:C\/|COM|DE)?\s*(\d{1,4})\s*(?:UN|UND|UNID|UNIDADES)\b/,
+    /\b(\d{1,4})\s*[Xx]\s*(?:UN|UND|UNID|UNIDADES)\b/,
+    /\bC\/?\s*(\d{1,4})\s*(?:UN|UND|UNID|UNIDADES)\b/,
+  ];
+  for (const pattern of patterns) {
+    const count = Number(value.match(pattern)?.[1] || 0);
+    if (count > 1 && count <= 1000) return count;
+  }
+  return 0;
+}
+
+function fiscalConversion({ description, uCom, qCom, uTrib, qTrib, vProd, vUnTrib }) {
+  const xmlFactor = qCom > 0 ? qTrib / qCom : 1;
+  const descriptionFactor = isPackageUnit(uCom) ? packageCountFromDescription(description) : 0;
+  const usesXmlConversion = xmlFactor > 1.000001;
+  const factor = usesXmlConversion ? xmlFactor : descriptionFactor || Math.max(xmlFactor, 1);
+  const fiscalQuantity = qCom > 0 ? qCom * factor : qTrib;
+  const fiscalUnit = usesXmlConversion && uTrib && !isPackageUnit(uTrib) ? uTrib : factor > 1 ? "UN" : (uTrib || uCom || "UN");
+  return {
+    conversion: factor,
+    fiscalQuantity,
+    fiscalUnit,
+    unitCost: fiscalQuantity > 0 ? vProd / fiscalQuantity : vUnTrib || 0,
+    conversionSource: usesXmlConversion ? "xml" : descriptionFactor ? "descricao" : "sem_conversao",
+    conversionNeedsReview: isPackageUnit(uCom) && !usesXmlConversion,
+  };
+}
+
 function participantFrom(node) {
   const address = node?.getElementsByTagName("enderEmit")?.[0] || node?.getElementsByTagName("enderDest")?.[0];
   return {
@@ -204,6 +239,8 @@ async function loadFiemgRemote(force = false) {
       deadline: row.deadline, estimatedValue: Number(row.estimated_value), status: row.status,
       nextStep: row.next_step, sourceUrl: row.source_url, createdAt: row.created_at,
       portalStatus: row.portal_status, portalGroup: row.portal_group, itemCount: row.item_count, importedAt: row.imported_at,
+      homologatedAt: row.homologated_at, regionalMatch: Boolean(row.regional_match), locations: row.locations || [],
+      retentionReason: row.retention_reason || "", portalModule: row.portal_module || null,
     }));
     state.fiemg.opportunities = [...merged.values()].sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
     const grouped = {};
@@ -254,6 +291,12 @@ async function saveFiemgOpportunityRemote(opportunity) {
     status: opportunity.status,
     next_step: opportunity.nextStep || null,
     source_url: opportunity.sourceUrl,
+    imported_at: opportunity.importedAt || new Date().toISOString(),
+    homologated_at: opportunity.homologatedAt || null,
+    regional_match: Boolean(opportunity.regionalMatch),
+    locations: opportunity.locations || [],
+    retention_reason: opportunity.retentionReason || null,
+    portal_module: opportunity.portalModule || null,
     created_by: userData.user?.id || null,
   }, { onConflict: "company_cnpj,process" });
   if (error) throw new Error("Processo mantido neste dispositivo; falha ao salvar na nuvem.");
@@ -304,6 +347,7 @@ function parseNfe(xmlText) {
     const qTrib = toNumber(text(prod, "qTrib")) || qCom;
     const vProd = toNumber(text(prod, "vProd"));
     const vUnTrib = toNumber(text(prod, "vUnTrib")) || (qTrib ? vProd / qTrib : 0);
+    const conversion = fiscalConversion({ description: text(prod, "xProd"), uCom: text(prod, "uCom"), qCom, uTrib: text(prod, "uTrib"), qTrib, vProd, vUnTrib });
     return {
       code: text(prod, "cProd"),
       ean: text(prod, "cEAN") || "SEM GTIN",
@@ -319,7 +363,7 @@ function parseNfe(xmlText) {
       uTrib: text(prod, "uTrib") || text(prod, "uCom") || "UNIDADE",
       qTrib,
       vUnTrib,
-      conversion: qCom ? qTrib / qCom : 1,
+      ...conversion,
       tax: imposto ? {
         vICMS: text(imposto, "vICMS"),
         vICMSST: text(imposto, "vICMSST"),
@@ -384,7 +428,9 @@ function importNfe(xmlText, sourceName = "arquivo XML") {
       cfop: item.cfop,
     };
 
-    const movementQty = item.qTrib * (document.type === "entrada" ? 1 : -1);
+    const fiscalQuantity = document.type === "entrada" ? item.fiscalQuantity : item.qTrib;
+    const fiscalUnit = document.type === "entrada" ? item.fiscalUnit : item.uTrib;
+    const movementQty = fiscalQuantity * (document.type === "entrada" ? 1 : -1);
     existing.stock += movementQty;
     existing.description = item.description || existing.description;
     existing.ncm = item.ncm || existing.ncm;
@@ -392,22 +438,26 @@ function importNfe(xmlText, sourceName = "arquivo XML") {
     existing.ean = item.ean || existing.ean;
     existing.eanTrib = item.eanTrib || existing.eanTrib;
     existing.internalCode = item.code || existing.internalCode;
-    existing.uTrib = item.uTrib || existing.uTrib;
+    existing.uTrib = fiscalUnit || existing.uTrib;
     existing.cfop = item.cfop || existing.cfop;
 
     if (document.type === "entrada") {
       existing.totalCost += item.vProd;
       existing.documents += 1;
       existing.lastPurchase = document.issuedAt;
-      existing.lastPurchasePrice = item.vUnTrib || item.vUnCom || 0;
+      existing.lastPurchasePrice = item.unitCost || 0;
       existing.purchaseHistory.unshift({
         date: document.issuedAt,
         supplier: document.emit.name,
         supplierCnpj: document.emit.cnpj,
-        quantity: item.qTrib,
+        quantity: fiscalQuantity,
         unitCost: existing.lastPurchasePrice,
         total: item.vProd,
         documentKey: document.key,
+        itemIndex: document.items.indexOf(item),
+        commercialQuantity: item.qCom,
+        commercialUnit: item.uCom,
+        conversion: item.conversion,
       });
     }
 
@@ -419,10 +469,12 @@ function importNfe(xmlText, sourceName = "arquivo XML") {
       productKey,
       product: item.description,
       quantity: movementQty,
-      unit: item.uTrib,
+      unit: fiscalUnit,
       commercialQuantity: item.qCom,
       commercialUnit: item.uCom,
       conversion: item.conversion,
+      unitCost: document.type === "entrada" ? item.unitCost : 0,
+      itemIndex: document.items.indexOf(item),
       documentKey: document.key,
       documentNumber: document.number,
       cfop: item.cfop,
@@ -497,7 +549,7 @@ function renderStock() {
       <td>${product.ncm || "-"}</td>
       <td>${product.cest || "-"}</td>
       <td>${number.format(product.stock || 0)} ${product.uTrib || "un"}</td>
-      <td>${money.format(product.lastPurchasePrice || 0)}</td>
+      <td><strong>${money.format(product.lastPurchasePrice || 0)}</strong><br><small>por ${escapeHtml(product.uTrib || "un")}</small></td>
       <td>${formatDate(product.lastPurchase)}</td>
       <td><input class="stock-input validity-input" data-product="${product.key}" type="date" value="${product.validity || ""}" /></td>
     </tr>
@@ -541,14 +593,14 @@ function renderImportResult(doc) {
     </div>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Produto</th><th>CFOP</th><th>Compra</th><th>Tributável</th><th>Conversão</th><th>Tributos extraídos</th></tr></thead>
-        <tbody>${doc.items.map((item) => `
+        <thead><tr><th>Produto</th><th>Compra</th><th>Estoque fiscal</th><th>Custo unitário</th><th>Conversão</th><th>Tributos</th></tr></thead>
+        <tbody>${doc.items.map((item, index) => `
           <tr>
-            <td><strong>${item.description}</strong><br><small>EAN ${item.ean} · EAN Trib. ${item.eanTrib}</small></td>
-            <td>${item.cfop}</td>
-            <td>${number.format(item.qCom)} ${item.uCom}</td>
-            <td>${number.format(item.qTrib)} ${item.uTrib}</td>
-            <td>${number.format(item.conversion)} ${item.uTrib}/${item.uCom}</td>
+            <td><strong>${escapeHtml(item.description)}</strong><br><small>EAN ${escapeHtml(item.ean)} · NCM ${escapeHtml(item.ncm || "-")} · CFOP ${escapeHtml(item.cfop)}</small></td>
+            <td>${number.format(item.qCom)} ${escapeHtml(item.uCom)}</td>
+            <td><strong>${number.format(doc.type === "entrada" ? (item.fiscalQuantity || item.qTrib) : item.qTrib)} ${escapeHtml(doc.type === "entrada" ? (item.fiscalUnit || item.uTrib) : item.uTrib)}</strong></td>
+            <td><strong>${money.format(doc.type === "entrada" ? (item.unitCost || item.vUnTrib || item.vUnCom) : item.vUnTrib)}</strong><br><small>valor do produto ÷ quantidade fiscal</small></td>
+            <td>${doc.type === "entrada" ? `<label class="conversion-field"><span>1 ${escapeHtml(item.uCom)} =</span><input class="conversion-input" data-document="${escapeHtml(doc.key)}" data-item="${index}" type="number" min="0.0001" step="0.0001" value="${item.conversion || 1}" /><span>${escapeHtml(item.fiscalUnit || item.uTrib)}</span></label><small class="conversion-origin ${item.conversionNeedsReview ? "warning-copy" : ""}">${item.conversionSource === "xml" ? "Informada no XML" : item.conversionSource === "descricao" ? "Detectada na descrição; confira" : isPackageUnit(item.uCom) ? "Embalagem sem quantidade; informe" : "Sem conversão"}</small>` : `${number.format(item.conversion || 1)} ${escapeHtml(item.uTrib)}/${escapeHtml(item.uCom)}`}</td>
             <td>ICMS ${item.tax.vICMS || "-"} · ST ${item.tax.vICMSST || "-"} · PIS ${item.tax.vPIS || "-"} · COFINS ${item.tax.vCOFINS || "-"}</td>
           </tr>`).join("")}
         </tbody>
@@ -576,11 +628,42 @@ function renderProposal() {
   window.renderWorkspace?.();
 }
 
+function updateFiscalConversion(documentKey, itemIndex, factor) {
+  const doc = state.documents.find((entry) => entry.key === documentKey);
+  if (!doc || doc.type !== "entrada") return showToast("Não encontrei a nota de entrada para ajustar.");
+  const item = doc.items[itemIndex];
+  if (!item || !Number.isFinite(factor) || factor <= 0) return showToast("Informe um fator de conversão válido.");
+  const oldQuantity = Number(item.fiscalQuantity || item.qTrib || item.qCom || 0);
+  const newQuantity = item.qCom * factor;
+  if (newQuantity <= 0) return showToast("A quantidade fiscal precisa ser maior que zero.");
+  item.conversion = factor;
+  item.fiscalQuantity = newQuantity;
+  item.fiscalUnit = factor > 1 ? "UN" : item.uTrib || item.uCom;
+  item.unitCost = item.vProd / newQuantity;
+  item.conversionSource = "manual";
+  item.conversionNeedsReview = false;
+  const productKey = item.eanTrib || item.ean || item.code;
+  const product = state.products[productKey];
+  if (product) {
+    product.stock += newQuantity - oldQuantity;
+    product.uTrib = item.fiscalUnit;
+    product.lastPurchasePrice = item.unitCost;
+    const history = product.purchaseHistory?.find((entry) => entry.documentKey === doc.key && entry.itemIndex === itemIndex);
+    if (history) Object.assign(history, { quantity: newQuantity, unitCost: item.unitCost, conversion: factor });
+  }
+  const movement = state.movements.find((entry) => entry.documentKey === doc.key && entry.itemIndex === itemIndex);
+  if (movement) Object.assign(movement, { quantity: newQuantity, unit: item.fiscalUnit, conversion: factor, unitCost: item.unitCost });
+  saveState();
+  render();
+  renderImportResult(doc);
+  showToast(`Conversão atualizada: ${number.format(newQuantity)} ${item.fiscalUnit} a ${money.format(item.unitCost)} por unidade.`);
+}
+
 function renderFiemg() {
   const opportunities = state.fiemg.opportunities || [];
   const rows = opportunities.map((item) => `
     <tr>
-      <td><strong>${escapeHtml(item.process)}</strong><br><small>${formatDate(item.createdAt)}</small></td>
+      <td><a class="process-link" href="/fiemg-detail.html?process=${encodeURIComponent(item.process)}" target="_blank" rel="noreferrer"><strong>${escapeHtml(item.process)}</strong><i data-lucide="external-link"></i></a><br><small>${item.regionalMatch ? "Até 50 km · " : ""}${formatDate(item.createdAt)}</small></td>
       <td>${escapeHtml(item.object)}${state.fiemg.items?.[item.process]?.length ? `<details class="fiemg-items"><summary>Consultar itens</summary><ul>${state.fiemg.items[item.process].map((part) => `<li>${escapeHtml(part.description)}<br><small>${number.format(part.quantity)} ${escapeHtml(part.unit)} · ${money.format(part.referenceUnitPrice)} por unidade</small></li>`).join("")}</ul></details>` : ""}</td>
       <td>${escapeHtml(item.entity || "-")}</td>
       <td>${formatDate(item.deadline)}</td>
@@ -623,6 +706,11 @@ function upsertFiemgProcess(process) {
     portalStatus: process.portalStatus || "",
     portalGroup: process.portalGroup || "",
     itemCount: Number(process.itemCount || process.items?.length || 0),
+    homologatedAt: process.homologatedAt || null,
+    regionalMatch: Boolean(process.regionalMatch),
+    locations: process.locations || [],
+    retentionReason: process.retentionReason || "",
+    portalModule: process.portalModule || null,
     nextStep: "Conferir itens importados, cruzar com estoque e precificar proposta.",
     source: "Compras FIEMG",
     sourceUrl: process.sourceUrl || "https://compras.fiemg.com.br/",
@@ -768,6 +856,9 @@ document.addEventListener("change", (event) => {
       renderProducts();
       showToast("Validade atualizada.");
     }
+  }
+  if (event.target.classList.contains("conversion-input")) {
+    updateFiscalConversion(event.target.dataset.document, Number(event.target.dataset.item), Number(event.target.value));
   }
 });
 

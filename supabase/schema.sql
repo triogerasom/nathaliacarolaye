@@ -111,6 +111,12 @@ create table if not exists public.fiemg_opportunities (
   status text not null default 'Mapeando',
   next_step text,
   source_url text,
+  imported_at timestamptz,
+  homologated_at timestamptz,
+  regional_match boolean not null default false,
+  locations jsonb not null default '[]',
+  retention_reason text,
+  portal_module integer,
   created_at timestamptz not null default now(),
   created_by uuid references auth.users(id),
   unique (company_cnpj, process)
@@ -133,6 +139,36 @@ create table if not exists public.fiemg_opportunity_items (
   unique (company_cnpj, process, external_item_id)
 );
 
+create table if not exists public.fiemg_sync_status (
+  company_cnpj text primary key,
+  status text not null default 'pending',
+  started_at timestamptz,
+  finished_at timestamptz,
+  last_success_at timestamptz,
+  process_count integer not null default 0,
+  item_count integer not null default 0,
+  message text,
+  run_url text,
+  coverage jsonb not null default '{}'
+);
+
+create table if not exists public.fiemg_discovery (
+  process_key text primary key,
+  fingerprint text not null,
+  checked_at timestamptz not null,
+  homologated_at timestamptz,
+  retained boolean not null default false
+);
+
+create table if not exists public.fiemg_detail_cache (
+  cache_key text primary key,
+  company_cnpj text not null,
+  payload jsonb not null,
+  created_at timestamptz not null default now(),
+  expires_at timestamptz not null default now() + interval '24 hours'
+);
+create index if not exists fiemg_detail_cache_expiry on public.fiemg_detail_cache(expires_at);
+
 alter table public.company_app_state enable row level security;
 alter table public.fiscal_documents enable row level security;
 alter table public.fiscal_products enable row level security;
@@ -141,6 +177,9 @@ alter table public.participants enable row level security;
 alter table public.commercial_proposals enable row level security;
 alter table public.fiemg_opportunities enable row level security;
 alter table public.fiemg_opportunity_items enable row level security;
+alter table public.fiemg_sync_status enable row level security;
+alter table public.fiemg_discovery enable row level security;
+alter table public.fiemg_detail_cache enable row level security;
 
 drop policy if exists "authenticated users manage company state" on public.company_app_state;
 create policy "authenticated users manage company state"
@@ -205,3 +244,19 @@ create policy "authenticated users manage fiemg opportunity items"
   to authenticated
   using (true)
   with check (true);
+
+drop policy if exists "company reads fiemg sync status" on public.fiemg_sync_status;
+create policy "company reads fiemg sync status" on public.fiemg_sync_status
+  for select to authenticated
+  using (company_cnpj = '68205288000174' and auth.jwt()->>'email' = 'eu15933220620@gmail.com');
+
+drop policy if exists "owner reads active fiemg cache" on public.fiemg_detail_cache;
+create policy "owner reads active fiemg cache" on public.fiemg_detail_cache for select to authenticated
+  using (company_cnpj = '68205288000174' and auth.jwt()->>'email' = 'eu15933220620@gmail.com' and expires_at > now());
+drop policy if exists "owner inserts fiemg cache" on public.fiemg_detail_cache;
+create policy "owner inserts fiemg cache" on public.fiemg_detail_cache for insert to authenticated
+  with check (company_cnpj = '68205288000174' and auth.jwt()->>'email' = 'eu15933220620@gmail.com' and expires_at <= now() + interval '24 hours 1 minute');
+drop policy if exists "owner updates fiemg cache" on public.fiemg_detail_cache;
+create policy "owner updates fiemg cache" on public.fiemg_detail_cache for update to authenticated
+  using (company_cnpj = '68205288000174' and auth.jwt()->>'email' = 'eu15933220620@gmail.com')
+  with check (company_cnpj = '68205288000174' and auth.jwt()->>'email' = 'eu15933220620@gmail.com' and expires_at <= now() + interval '24 hours 1 minute');

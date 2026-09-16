@@ -1,10 +1,12 @@
-const CACHE_NAME = "nathalia-fiscal-executive-v3";
+const CACHE_NAME = "nathalia-fiscal-executive-v4";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./styles.css",
   "./app.js",
   "./workspace.js",
+  "./fiemg-detail.html",
+  "./fiemg-detail.js",
   "./vendor/lucide.min.js",
   "./manifest.webmanifest",
   "./assets/logo-nathalia.png",

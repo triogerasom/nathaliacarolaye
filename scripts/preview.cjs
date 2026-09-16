@@ -14,6 +14,14 @@ const server = http.createServer(async (req, res) => {
     res.json = (value) => { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(value)); };
     return require('../api/fiemg-import.js')(req, res);
   }
+  if (url.pathname === '/api/fiemg-detail') {
+    req.query = Object.fromEntries(url.searchParams);
+    req.status = (code) => { res.statusCode = code; return res; };
+    req.json = (value) => { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(value)); };
+    res.status = req.status;
+    res.json = req.json;
+    return require('../api/fiemg-detail.js')(req, res);
+  }
   const file = path.resolve(root, '.' + decodeURIComponent(url.pathname === '/' ? '/index.html' : url.pathname));
   if (!file.startsWith(root + path.sep)) { res.writeHead(403).end(); return; }
   try {
