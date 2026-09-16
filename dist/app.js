@@ -33,6 +33,9 @@ const initialState = {
   currentProposal: { customer: "", validity: "", items: [] },
   fiemg: {
     opportunities: [],
+    items: {},
+    lastSyncAt: "",
+    lastSyncMessage: "",
   },
 };
 
@@ -40,6 +43,11 @@ let state = loadState();
 let supabaseClient = null;
 let supabaseReady = false;
 let deferredInstallPrompt;
+let fiemgImportBusy = false;
+
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
+}
 
 function loadState() {
   const saved = localStorage.getItem("nathaliaFiscalState");
@@ -59,6 +67,7 @@ function loadState() {
       ...structuredClone(initialState.fiemg),
       ...(loaded.fiemg || {}),
       opportunities: loaded.fiemg?.opportunities || [],
+      items: loaded.fiemg?.items || {},
     },
     currentProposal: {
       ...structuredClone(initialState.currentProposal),
@@ -85,7 +94,7 @@ function toNumber(value) {
 
 function formatDate(value) {
   if (!value) return "-";
-  const date = new Date(value);
+  const date = new Date(/^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T12:00:00` : value);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString("pt-BR");
 }
 
@@ -160,14 +169,64 @@ async function loadRemoteState() {
     .select("data")
     .eq("company_cnpj", COMPANY.cnpj)
     .maybeSingle();
-  if (error || !data?.data) return;
-  state = { ...state, ...data.data, auth: { ...state.auth, ...(data.data.auth || {}), loggedIn: true } };
+  if (!error && data?.data) state = { ...state, ...data.data, auth: { ...state.auth, ...(data.data.auth || {}), loggedIn: true } };
+  state.fiemg = { ...structuredClone(initialState.fiemg), ...(state.fiemg || {}) };
+  await loadFiemgRemote(true);
+}
+
+async function loadFiemgRemote(force = false) {
+  if (!supabaseReady || !supabaseClient || !state.auth.loggedIn) return;
+  const { data: sync, error: syncError } = await supabaseClient.from("fiemg_sync_status").select("*").eq("company_cnpj", COMPANY.cnpj).maybeSingle();
+  if (syncError) {
+    state.fiemg.serverSyncError = "Não foi possível consultar a automação no servidor.";
+    window.renderWorkspace?.();
+    return;
+  }
+  const previousSuccess = state.fiemg.serverSync?.last_success_at;
+  state.fiemg.serverSync = sync;
+  state.fiemg.serverSyncError = "";
+  if (!force && previousSuccess && previousSuccess === sync?.last_success_at) { window.renderWorkspace?.(); return; }
+  async function readRows(table) {
+    const rows = [];
+    for (let start = 0; ; start += 1000) {
+      const { data, error } = await supabaseClient.from(table).select("*").eq("company_cnpj", COMPANY.cnpj).order("id").range(start, start + 999);
+      if (error) throw new Error("Não foi possível carregar os processos salvos no servidor.");
+      rows.push(...data);
+      if (data.length < 1000) return rows;
+    }
+  }
+  try {
+    const [opportunities, items] = await Promise.all([readRows("fiemg_opportunities"), readRows("fiemg_opportunity_items")]);
+    const merged = new Map(state.fiemg.opportunities.map((entry) => [entry.process, entry]));
+    opportunities.forEach((row) => merged.set(row.process, {
+      ...(merged.get(row.process) || {}), id: row.id, process: row.process, processNumber: row.process_number,
+      object: row.object, entity: row.entity, externalProcessId: row.external_process_id, modality: row.modality,
+      deadline: row.deadline, estimatedValue: Number(row.estimated_value), status: row.status,
+      nextStep: row.next_step, sourceUrl: row.source_url, createdAt: row.created_at,
+      portalStatus: row.portal_status, portalGroup: row.portal_group, itemCount: row.item_count, importedAt: row.imported_at,
+    }));
+    state.fiemg.opportunities = [...merged.values()].sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
+    const grouped = {};
+    items.forEach((row) => (grouped[row.process] ||= []).push({ externalItemId: row.external_item_id, order: row.item_order, description: row.description, quantity: Number(row.quantity), unit: row.unit, referenceUnitPrice: Number(row.reference_unit_price), portalStatus: row.portal_status, phase: row.phase }));
+    Object.values(grouped).forEach((parts) => parts.sort((a, b) => a.order - b.order));
+    state.fiemg.items = { ...state.fiemg.items, ...grouped };
+    localStorage.setItem("nathaliaFiscalState", JSON.stringify(state));
+    renderFiemg();
+    renderKpis();
+    window.renderWorkspace?.();
+  } catch (error) {
+    state.fiemg.serverSyncError = error.message;
+    state.fiemg.serverSync = { ...sync, last_success_at: previousSuccess };
+    window.renderWorkspace?.();
+  }
 }
 
 async function saveRemoteState() {
   if (!supabaseReady || !supabaseClient || !state.auth.loggedIn) return;
   const { data: userData } = await supabaseClient.auth.getUser();
-  const payload = { ...state, auth: { ...state.auth, loggedIn: false } };
+  // FIEMG is stored separately so a browser snapshot cannot overwrite server imports.
+  const { fiemg, ...appState } = state;
+  const payload = { ...appState, auth: { ...state.auth, loggedIn: false } };
   await supabaseClient.from("company_app_state").upsert({
     company_cnpj: COMPANY.cnpj,
     data: payload,
@@ -179,18 +238,43 @@ async function saveRemoteState() {
 async function saveFiemgOpportunityRemote(opportunity) {
   if (!supabaseReady || !supabaseClient || !state.auth.loggedIn) return;
   const { data: userData } = await supabaseClient.auth.getUser();
-  await supabaseClient.from("fiemg_opportunities").upsert({
+  const { error } = await supabaseClient.from("fiemg_opportunities").upsert({
     company_cnpj: COMPANY.cnpj,
     process: opportunity.process,
     object: opportunity.object,
     entity: opportunity.entity || null,
+    external_process_id: opportunity.externalProcessId || null,
+    process_number: opportunity.processNumber || opportunity.process,
+    modality: opportunity.modality || null,
+    portal_status: opportunity.portalStatus || null,
+    portal_group: opportunity.portalGroup || null,
+    item_count: opportunity.itemCount || 0,
     deadline: opportunity.deadline || null,
     estimated_value: opportunity.estimatedValue || 0,
     status: opportunity.status,
     next_step: opportunity.nextStep || null,
     source_url: opportunity.sourceUrl,
     created_by: userData.user?.id || null,
-  });
+  }, { onConflict: "company_cnpj,process" });
+  if (error) throw new Error("Processo mantido neste dispositivo; falha ao salvar na nuvem.");
+}
+
+async function saveFiemgItemsRemote(opportunity, items = []) {
+  if (!supabaseReady || !supabaseClient || !state.auth.loggedIn || !items.length) return;
+  const rows = items.map((item) => ({
+    company_cnpj: COMPANY.cnpj,
+    process: opportunity.process,
+    external_item_id: item.externalItemId || null,
+    item_order: item.order || null,
+    description: item.description || "",
+    quantity: item.quantity || 0,
+    unit: item.unit || null,
+    reference_unit_price: item.referenceUnitPrice || 0,
+    portal_status: item.portalStatus || null,
+    phase: item.phase || null,
+  }));
+  const { error } = await supabaseClient.from("fiemg_opportunity_items").upsert(rows, { onConflict: "company_cnpj,process,external_item_id" });
+  if (error) throw new Error("Itens mantidos neste dispositivo; falha ao salvar na nuvem.");
 }
 
 function parseNfe(xmlText) {
@@ -369,6 +453,7 @@ function render() {
   renderDocuments();
   renderProposal();
   renderFiemg();
+  window.renderWorkspace?.();
 }
 
 function renderKpis() {
@@ -376,17 +461,17 @@ function renderKpis() {
   const documents = state.documents;
   const entries = documents.filter((doc) => doc.type === "entrada");
   const exits = documents.filter((doc) => doc.type === "saida");
-  const fiemgOpen = state.fiemg.opportunities.filter((item) => item.status !== "Não participar" && item.status !== "Proposta enviada").length;
+  const fiemgOpen = state.fiemg.opportunities.filter((item) => item.status !== "Não participar" && item.status !== "Proposta enviada" && item.portalGroup !== "Encerrado").length;
   const stockUnits = products.reduce((sum, product) => sum + Number(product.stock || 0), 0);
   const stockValue = products.reduce((sum, product) => sum + Math.max(Number(product.stock || 0), 0) * Number(product.lastPurchasePrice || 0), 0);
   const cards = [
-    ["Itens fiscais", number.format(stockUnits), "Saldo em unidade tributável"],
-    ["Valor estimado", money.format(stockValue), "Último preço de compra"],
-    ["Entradas", entries.length, "NF-e em que a empresa é destinatária"],
-    ["FIEMG abertas", fiemgOpen, "Processos em acompanhamento"],
+    ["Saldo fiscal", number.format(stockUnits), "Unidades em estoque", "boxes"],
+    ["Valor em estoque", money.format(stockValue), "Pelo último custo de compra", "wallet"],
+    ["Notas de entrada", entries.length, `${exits.length} notas de saída`, "file-text"],
+    ["Oportunidades", fiemgOpen, "Em acompanhamento na FIEMG", "briefcase-business"],
   ];
-  document.getElementById("kpi-grid").innerHTML = cards.map(([label, value, hint]) => `
-    <article class="kpi-card"><span>${label}</span><strong>${value}</strong><small>${hint}</small></article>
+  document.getElementById("kpi-grid").innerHTML = cards.map(([label, value, hint, icon]) => `
+    <article class="kpi-card"><span>${label}<i data-lucide="${icon}"></i></span><strong>${value}</strong><small>${hint}</small></article>
   `).join("");
 }
 
@@ -479,7 +564,7 @@ function renderProposal() {
       <td>${number.format(item.quantity)}</td>
       <td>${money.format(item.unitPrice)}</td>
       <td>${money.format(item.quantity * item.unitPrice)}</td>
-      <td><button class="secondary remove-proposal-item" data-index="${index}" type="button">Remover</button></td>
+      <td><button class="icon-button remove-proposal-item" data-index="${index}" type="button" title="Remover item" aria-label="Remover item"><i data-lucide="trash-2"></i></button></td>
     </tr>
   `);
   const total = state.currentProposal.items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
@@ -488,23 +573,27 @@ function renderProposal() {
   document.getElementById("saved-proposal-rows").innerHTML = state.proposals.map((proposal) => `
     <tr><td>${proposal.number}</td><td>${proposal.customer}</td><td>${formatDate(proposal.createdAt)}</td><td>${formatDate(proposal.validity)}</td><td>${money.format(proposal.total)}</td></tr>
   `).join("") || emptyRow(5, "Nenhuma proposta salva.");
+  window.renderWorkspace?.();
 }
 
 function renderFiemg() {
   const opportunities = state.fiemg.opportunities || [];
   const rows = opportunities.map((item) => `
     <tr>
-      <td><strong>${item.process}</strong><br><small>${formatDate(item.createdAt)}</small></td>
-      <td>${item.object}</td>
-      <td>${item.entity || "-"}</td>
+      <td><strong>${escapeHtml(item.process)}</strong><br><small>${formatDate(item.createdAt)}</small></td>
+      <td>${escapeHtml(item.object)}${state.fiemg.items?.[item.process]?.length ? `<details class="fiemg-items"><summary>Consultar itens</summary><ul>${state.fiemg.items[item.process].map((part) => `<li>${escapeHtml(part.description)}<br><small>${number.format(part.quantity)} ${escapeHtml(part.unit)} · ${money.format(part.referenceUnitPrice)} por unidade</small></li>`).join("")}</ul></details>` : ""}</td>
+      <td>${escapeHtml(item.entity || "-")}</td>
       <td>${formatDate(item.deadline)}</td>
       <td>${money.format(item.estimatedValue || 0)}</td>
-      <td>${item.status}</td>
-      <td>${item.nextStep || "-"}</td>
+      <td>${item.itemCount || state.fiemg.items?.[item.process]?.length || 0}</td>
+      <td>${escapeHtml(item.status)}</td>
+      <td>${escapeHtml(item.nextStep || "-")}</td>
     </tr>
   `);
   document.getElementById("fiemg-total").textContent = opportunities.length;
-  document.getElementById("fiemg-rows").innerHTML = rows.join("") || emptyRow(7, "Nenhuma oportunidade FIEMG registrada ainda.");
+  document.getElementById("fiemg-sync-status").textContent = state.fiemg.lastSyncMessage || "Pronta para sincronizar o portal.";
+  document.getElementById("fiemg-rows").innerHTML = rows.join("") || emptyRow(8, "Nenhuma oportunidade FIEMG registrada ainda.");
+  window.renderWorkspace?.();
 }
 
 function emptyRow(cols, message) {
@@ -518,6 +607,89 @@ function showToast(message) {
   window.setTimeout(() => toast.classList.remove("show"), 3600);
 }
 
+function upsertFiemgProcess(process) {
+  const processCode = process.processNumber || `FIEMG-${process.externalProcessId || Date.now()}`;
+  const opportunity = {
+    id: crypto.randomUUID(),
+    process: processCode,
+    processNumber: process.processNumber || processCode,
+    externalProcessId: process.externalProcessId || null,
+    object: process.object || "Processo FIEMG sem objeto informado",
+    entity: process.entity || "SISTEMA FIEMG",
+    modality: process.modality || "",
+    deadline: process.deadline ? isoDate(process.deadline) : "",
+    estimatedValue: Number(process.estimatedValue || 0),
+    status: process.portalStatus || "Importado",
+    portalStatus: process.portalStatus || "",
+    portalGroup: process.portalGroup || "",
+    itemCount: Number(process.itemCount || process.items?.length || 0),
+    nextStep: "Conferir itens importados, cruzar com estoque e precificar proposta.",
+    source: "Compras FIEMG",
+    sourceUrl: process.sourceUrl || "https://compras.fiemg.com.br/",
+    attachmentUrl: process.attachmentUrl || "",
+    createdAt: new Date().toISOString(),
+    importedAt: process.importedAt || new Date().toISOString(),
+  };
+  const index = state.fiemg.opportunities.findIndex((item) =>
+    item.process === opportunity.process || (item.externalProcessId && item.externalProcessId === opportunity.externalProcessId)
+  );
+  if (index >= 0) {
+    opportunity.status = state.fiemg.opportunities[index].status;
+    opportunity.nextStep = state.fiemg.opportunities[index].nextStep;
+    opportunity.id = state.fiemg.opportunities[index].id;
+    opportunity.createdAt = state.fiemg.opportunities[index].createdAt;
+    state.fiemg.opportunities[index] = { ...state.fiemg.opportunities[index], ...opportunity };
+  } else {
+    state.fiemg.opportunities.unshift(opportunity);
+  }
+  if (process.items?.length) state.fiemg.items[opportunity.process] = process.items;
+  return opportunity;
+}
+
+async function importFiemgProcesses(mode, code = "") {
+  if (fiemgImportBusy) throw new Error("Uma sincronização já está em andamento.");
+  fiemgImportBusy = true;
+  document.getElementById("fiemg-sync-button").disabled = true;
+  document.getElementById("fiemg-import-button").disabled = true;
+  const syncStatus = document.getElementById("fiemg-sync-status");
+  try {
+  syncStatus.textContent = mode === "sync" ? "Sincronizando mural público..." : "Importando processo FIEMG...";
+  const response = await fetch("/api/fiemg-import", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ mode, code, limit: 12, includeItems: true }),
+    signal: AbortSignal.timeout(90000),
+  });
+  const payload = await response.json();
+  if (!response.ok || payload.error) throw new Error(payload.error || "Falha na importação FIEMG.");
+  const saved = [];
+  for (const process of payload.processes || []) {
+    const opportunity = upsertFiemgProcess(process);
+    saved.push(opportunity);
+    localStorage.setItem("nathaliaFiscalState", JSON.stringify(state));
+    await saveFiemgOpportunityRemote(opportunity);
+    await saveFiemgItemsRemote(opportunity, process.items || []);
+  }
+  state.fiemg.lastSyncAt = new Date().toISOString();
+  state.fiemg.lastSyncMessage = `${saved.length} processo(s) importado(s) da FIEMG.`;
+  saveState();
+  renderFiemg();
+  renderKpis();
+  window.renderWorkspace?.();
+  return saved.length;
+  } catch (error) {
+    renderFiemg();
+    renderKpis();
+    window.renderWorkspace?.();
+    syncStatus.textContent = error.message || "Não foi possível sincronizar.";
+    throw error;
+  } finally {
+    fiemgImportBusy = false;
+    document.getElementById("fiemg-sync-button").disabled = false;
+    document.getElementById("fiemg-import-button").disabled = false;
+  }
+}
+
 function switchView(viewId) {
   const button = document.querySelector(`.nav-item[data-view="${viewId}"]`);
   document.querySelectorAll(".nav-item").forEach((item) => item.classList.remove("active"));
@@ -525,6 +697,9 @@ function switchView(viewId) {
   if (button) button.classList.add("active");
   document.getElementById(viewId).classList.add("active");
   document.getElementById("view-title").textContent = button?.textContent || "Sistema";
+  document.querySelectorAll(".nav-item").forEach((item) => item.setAttribute("aria-current", item === button ? "page" : "false"));
+  if (viewId === "integracoes") window.maybeSyncFiemg?.();
+  window.renderWorkspace?.();
 }
 
 function downloadBlob(blob, filename) {
@@ -597,8 +772,9 @@ document.addEventListener("change", (event) => {
 });
 
 document.addEventListener("click", (event) => {
-  if (event.target.classList.contains("remove-proposal-item")) {
-    state.currentProposal.items.splice(Number(event.target.dataset.index), 1);
+  const removeButton = event.target.closest(".remove-proposal-item");
+  if (removeButton) {
+    state.currentProposal.items.splice(Number(removeButton.dataset.index), 1);
     saveState();
     renderProposal();
   }
@@ -759,6 +935,34 @@ document.getElementById("save-proposal").addEventListener("click", () => {
   showToast("Proposta salva sem movimentar estoque.");
 });
 
+document.getElementById("fiemg-import-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const code = document.getElementById("fiemg-import-code").value.trim();
+  if (!code) return showToast("Informe o número SDE/CDE para importar.");
+  document.getElementById("fiemg-import-button").disabled = true;
+  try {
+    const count = await importFiemgProcesses("single", code);
+    document.getElementById("fiemg-import-code").value = "";
+    showToast(`${count} processo FIEMG importado automaticamente.`);
+  } catch (error) {
+    showToast(error.message || "Não consegui importar o processo FIEMG.");
+  } finally {
+    document.getElementById("fiemg-import-button").disabled = false;
+  }
+});
+
+document.getElementById("fiemg-sync-button").addEventListener("click", async () => {
+  document.getElementById("fiemg-sync-button").disabled = true;
+  try {
+    const count = await importFiemgProcesses("sync");
+    showToast(`${count} processo(s) sincronizado(s) do mural FIEMG.`);
+  } catch (error) {
+    showToast(error.message || "Não consegui sincronizar o mural FIEMG.");
+  } finally {
+    document.getElementById("fiemg-sync-button").disabled = false;
+  }
+});
+
 document.getElementById("fiemg-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const opportunity = {
@@ -775,13 +979,20 @@ document.getElementById("fiemg-form").addEventListener("submit", async (event) =
     createdAt: new Date().toISOString(),
   };
   if (!opportunity.process || !opportunity.object) return showToast("Informe processo e objeto da oportunidade.");
-  state.fiemg.opportunities.unshift(opportunity);
+  const existing = state.fiemg.opportunities.findIndex((item) => item.process === opportunity.process);
+  if (existing >= 0) {
+    state.fiemg.opportunities[existing] = { ...state.fiemg.opportunities[existing], ...opportunity, id: state.fiemg.opportunities[existing].id };
+  } else {
+    state.fiemg.opportunities.unshift(opportunity);
+  }
   document.getElementById("fiemg-form").reset();
   document.getElementById("fiemg-value").value = "0";
   saveState();
-  await saveFiemgOpportunityRemote(opportunity);
   renderFiemg();
   renderKpis();
+  window.renderWorkspace?.();
+  try { await saveFiemgOpportunityRemote(opportunity); }
+  catch (error) { showToast(error.message); return; }
   showToast("Oportunidade FIEMG salva no pipeline.");
 });
 

@@ -8,7 +8,7 @@
       name="description"
       content="Plataforma fiscal e operacional da empresa 68.205.288 NATHALIA CAROLAYNE DIAS ARAUJ."
     />
-    <meta name="theme-color" content="#090705" />
+    <meta name="theme-color" content="#17191c" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="Nathalia Fiscal" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -29,14 +29,14 @@
         </div>
 
         <form id="login-form" class="auth-form">
-          <span class="eyebrow">Acesso inicial</span>
-          <h1>Entrar na central</h1>
+          <span class="eyebrow">Nathalia Carolayne</span>
+          <h1>Acesse sua operação</h1>
           <label for="login-email">E-mail</label>
           <input id="login-email" type="email" autocomplete="username" value="eu15933220620@gmail.com" required />
           <label for="login-password">Senha</label>
           <input id="login-password" type="password" autocomplete="current-password" required />
           <button class="primary" type="submit">Entrar</button>
-          <p class="auth-note">No primeiro acesso, a senha inicial precisa ser trocada antes de liberar o painel.</p>
+          <p class="auth-note">Central fiscal e comercial</p>
         </form>
 
         <form id="password-form" class="auth-form hidden">
@@ -47,7 +47,7 @@
           <label for="confirm-password">Confirmar senha</label>
           <input id="confirm-password" type="password" autocomplete="new-password" minlength="6" required />
           <button class="primary" type="submit">Salvar e entrar</button>
-          <p class="auth-note">A próxima etapa da plataforma terá usuários, permissões e banco de dados no servidor.</p>
+          <p class="auth-note">Use uma senha exclusiva para sua conta.</p>
         </form>
       </div>
     </section>
@@ -62,88 +62,61 @@
           </div>
         </div>
 
-        <nav class="nav-list">
-          <button class="nav-item active" data-view="dashboard" type="button">Dashboard</button>
+        <nav class="nav-list" aria-label="Módulos">
+          <span class="nav-group">Visão geral</span>
+          <button class="nav-item active" data-view="dashboard" type="button">Painel executivo</button>
+          <span class="nav-group">Gestão fiscal</span>
           <button class="nav-item" data-view="importar" type="button">Importar XML</button>
           <button class="nav-item" data-view="estoque" type="button">Estoque Fiscal</button>
           <button class="nav-item" data-view="produtos" type="button">Produtos</button>
+          <button class="nav-item" data-view="documentos" type="button">Entradas e saídas</button>
+          <span class="nav-group">Comercial</span>
           <button class="nav-item" data-view="propostas" type="button">Propostas</button>
           <button class="nav-item" data-view="integracoes" type="button">Compras FIEMG</button>
           <button class="nav-item" data-view="exportar" type="button">Sebrae NFe</button>
-          <button class="nav-item" data-view="documentos" type="button">Entradas e Saídas</button>
-          <button class="nav-item" data-view="plataforma" type="button">Base da Plataforma</button>
+          <span class="nav-group">Organização</span>
+          <button class="nav-item" data-view="plataforma" type="button">Empresa e aplicativo</button>
           <button class="nav-item" data-view="auditoria" type="button">Auditoria</button>
         </nav>
 
         <section class="company-card">
-          <span>Operação ativa</span>
-          <strong>68.205.288 NATHALIA CAROLAYNE DIAS ARAUJ</strong>
-          <small>CNPJ 68.205.288/0001-74 · IE 0056002090061 · MG</small>
-          <a href="https://compras.fiemg.com.br/" target="_blank" rel="noreferrer">Abrir Compras FIEMG</a>
+          <span>Empresa</span>
+          <strong>Nathalia Carolayne</strong>
+          <small>68.205.288/0001-74<br>Minas Gerais · MEI</small>
         </section>
       </aside>
 
       <section class="workspace">
         <header class="topbar">
+          <button class="icon-button mobile-menu" id="menu-toggle" aria-label="Abrir menu" aria-expanded="false" type="button"><i data-lucide="menu"></i></button>
           <div>
-            <span class="eyebrow">Central operacional</span>
+            <span class="eyebrow">Nathalia / Gestão empresarial</span>
             <h1 id="view-title">Painel executivo</h1>
           </div>
           <div class="session-card" id="login-card">
-            <span>Usuário conectado</span>
+            <span class="avatar" aria-hidden="true">NC</span>
             <strong id="session-email">eu15933220620@gmail.com</strong>
-            <button id="logout-button" type="button">Sair</button>
+            <button id="logout-button" class="icon-button" aria-label="Sair da conta" title="Sair da conta" type="button"><i data-lucide="log-out"></i></button>
           </div>
         </header>
 
         <section class="view active" id="dashboard">
-          <section class="hero-ops">
+          <section class="overview-heading">
             <div>
-              <span class="eyebrow">Estrutura de ouro para MEI crescer</span>
-              <h2>Estoque fiscal, oportunidades e propostas no mesmo fluxo</h2>
-              <p>O painel foi reorganizado para operar como uma pequena central de compras: entra XML, nasce estoque fiscal, acompanha oportunidade, monta proposta e prepara exportação para emissão.</p>
+              <h2>Visão da operação</h2>
+              <p id="overview-date">Estoque, documentos e oportunidades</p>
             </div>
             <div class="hero-actions">
-              <button class="primary nav-shortcut" data-view="importar" type="button">Importar XML</button>
-              <button class="secondary nav-shortcut" data-view="integracoes" type="button">Ver FIEMG</button>
+              <button class="secondary nav-shortcut" data-view="propostas" type="button"><i data-lucide="plus"></i>Nova proposta</button>
+              <button class="primary nav-shortcut" data-view="importar" type="button"><i data-lucide="upload"></i>Importar XML</button>
             </div>
           </section>
 
           <div class="kpi-grid" id="kpi-grid"></div>
 
-          <section class="panel split">
-            <div>
-              <div class="section-heading">
-                <span>Operação fiscal</span>
-                <h2>Importação de NF-e com rastreabilidade</h2>
-              </div>
-              <p>
-                Importe XML de qualquer fornecedor ou saída emitida pela empresa. O sistema identifica entrada/saída pelo CNPJ, bloqueia duplicidade pela chave da NF-e e calcula o estoque pela quantidade tributável.
-              </p>
-              <div class="flow-grid">
-                <article>
-                  <strong>Entrada</strong>
-                  <span>Destinatária no XML</span>
-                  <small>Aumenta o estoque fiscal por GTIN/EAN.</small>
-                </article>
-                <article>
-                  <strong>Saída</strong>
-                  <span>Emitente no XML</span>
-                  <small>Reduz o estoque fiscal e registra baixa vinculada à NF-e.</small>
-                </article>
-                <article>
-                  <strong>Licitação</strong>
-                  <span>Compras FIEMG</span>
-                  <small>Registre oportunidades, prazo, valor estimado e decisão comercial.</small>
-                </article>
-              </div>
-            </div>
-            <div class="status-board">
-              <span class="status-pill ready">Pronto para XML</span>
-              <strong id="last-import-title">Importação ampla de NF-e</strong>
-              <p id="last-import-desc">Suba XMLs de compra e venda em lote. O estoque será movimentado por GTIN/EAN e chave de acesso.</p>
-              <button class="primary nav-shortcut" data-view="importar" type="button">Importar notas</button>
-            </div>
+          <section class="overview-columns">
+            <section class="panel"><div class="section-heading heading-actions"><div><span>Comercial</span><h2>Agenda de oportunidades</h2></div><button class="text-button nav-shortcut" data-view="integracoes" type="button">Ver FIEMG <i data-lucide="arrow-up-right"></i></button></div><div id="dashboard-opportunities"></div></section>
+            <section class="panel"><div class="section-heading"><span>Controle fiscal</span><h2>Pontos de atenção</h2></div><div id="dashboard-attention"></div></section>
           </section>
 
           <section class="panel">
@@ -173,14 +146,14 @@
             <div class="drop-zone" id="drop-zone">
               <input id="xml-input" type="file" accept=".xml,text/xml,application/xml" multiple />
               <div>
-                <span class="upload-icon">XML</span>
+                <span class="upload-icon"><i data-lucide="file-up"></i></span>
                 <h2>Importar XML de NF-e</h2>
-                <p>Arraste um ou vários XMLs aqui. O sistema valida CNPJ, chave de acesso, produtos, tributos, fornecedores/clientes e movimenta o estoque fiscal.</p>
+                <p>XML de entrada ou saída · Vários arquivos por importação</p>
                 <button class="primary" id="choose-file" type="button">Selecionar XML</button>
               </div>
             </div>
             <aside class="rules-card">
-              <strong>Regras desta fase</strong>
+              <strong>Conferência da importação</strong>
               <ul>
                 <li>Entrada: CNPJ da empresa aparece como destinatário.</li>
                 <li>Saída: CNPJ da empresa aparece como emitente.</li>
@@ -333,29 +306,30 @@
             <div>
               <div class="section-heading">
                 <span>Portal de compras eletrônicas</span>
-                <h2>Compras FIEMG</h2>
+                <h2>Mesa de oportunidades</h2>
               </div>
-              <p>O portal público da FIEMG lista processos em andamento e encerrados. Como não há API pública aberta, esta primeira integração cria uma mesa de controle: abrir portal, registrar oportunidade, calcular decisão e preparar proposta.</p>
-              <div class="integration-strip">
-                <article><strong>Fonte</strong><span>compras.fiemg.com.br</span></article>
-                <article><strong>Modo atual</strong><span>Portal assistido</span></article>
-                <article><strong>Próxima etapa</strong><span>Credencial/API ou captura autorizada</span></article>
-              </div>
+              <p>Processos, prazos e itens do portal Compras FIEMG.</p>
             </div>
             <aside class="portal-card">
-              <span class="status-pill ready">Conector inicial</span>
               <strong>Portal Compras FIEMG</strong>
-              <p>Abra o portal, consulte o processo e registre aqui os dados que interessam para a proposta.</p>
-              <a class="primary link-button" href="https://compras.fiemg.com.br/" target="_blank" rel="noreferrer">Abrir portal FIEMG</a>
+              <a class="secondary link-button" href="https://compras.fiemg.com.br/" target="_blank" rel="noreferrer">Consultar portal <i data-lucide="external-link"></i></a>
             </aside>
           </section>
 
           <section class="panel proposal-layout">
             <div>
               <div class="section-heading">
-                <span>Oportunidade</span>
-                <h2>Registrar processo FIEMG</h2>
+                <span>Sincronização</span>
+                <h2>Importar processos da FIEMG</h2>
               </div>
+              <form class="proposal-form fiemg-import-form" id="fiemg-import-form">
+                <label>Processo SDE/CDE <input id="fiemg-import-code" placeholder="Ex.: SDE 2026002232" /></label>
+                <button class="primary" id="fiemg-import-button" type="submit">Importar processo</button>
+                <button class="secondary" id="fiemg-sync-button" type="button">Sincronizar mural</button>
+              </form>
+              <div class="server-sync"><span class="status-pill" id="server-sync-state">Aguardando servidor</span><p id="server-sync-detail">Verificando a última execução automática.</p><small>Consulta programada dos 100 processos mais recentes a cada 15 minutos, mesmo com a plataforma fechada.</small></div>
+              <hr class="soft-separator" />
+              <details class="manual-entry"><summary>Cadastrar oportunidade manualmente</summary>
               <form class="proposal-form" id="fiemg-form">
                 <label>Processo <input id="fiemg-process" placeholder="Ex.: CDE 2026000098" required /></label>
                 <label>Objeto <input id="fiemg-object" placeholder="Produto ou serviço solicitado" required /></label>
@@ -374,12 +348,13 @@
                 <label class="wide-field">Próxima ação <input id="fiemg-next" placeholder="Ex.: cotar Ambev, conferir validade, montar proposta" /></label>
                 <button class="primary" type="submit">Salvar oportunidade</button>
               </form>
+              </details>
             </div>
             <aside class="proposal-summary">
-              <span class="status-pill ready">Mesa FIEMG</span>
+              <span class="summary-label">Em acompanhamento</span>
               <h2 id="fiemg-total">0</h2>
               <p>oportunidades acompanhadas</p>
-              <small>Use esta mesa para transformar edital em checklist comercial.</small>
+              <small id="fiemg-sync-status">Pronta para sincronizar o portal.</small>
             </aside>
           </section>
 
@@ -397,6 +372,7 @@
                     <th>Entidade</th>
                     <th>Prazo</th>
                     <th>Valor</th>
+                    <th>Itens</th>
                     <th>Status</th>
                     <th>Próxima ação</th>
                   </tr>
@@ -435,19 +411,19 @@
           <section class="panel split">
             <div>
               <div class="section-heading">
-                <span>Construção de longo prazo</span>
-                <h2>Base para uma plataforma completa</h2>
+                <span>Dados cadastrais</span>
+                <h2>Nathalia Carolayne</h2>
               </div>
               <p>
-                A estrutura já está organizada para crescer como sistema de atacarejo: começando pelo estoque fiscal e abrindo caminho para compras, vendas, clientes, fornecedores, financeiro e relatórios.
+                68.205.288 NATHALIA CAROLAYNE DIAS ARAUJ<br>CNPJ 68.205.288/0001-74 · IE 0056002090061 · Minas Gerais
               </p>
               <div class="module-grid">
                 <article class="module-card active"><strong>Estoque Fiscal</strong><span>XML NF-e, produtos, entradas, saídas e auditoria.</span></article>
-                <article class="module-card"><strong>Vendas</strong><span>Pedidos, balcão, baixa automática e cupom fiscal.</span></article>
-                <article class="module-card"><strong>Compras</strong><span>Fornecedores, pedidos de compra e conferência de nota.</span></article>
-                <article class="module-card"><strong>Financeiro</strong><span>Contas a pagar, receber, caixa e fluxo de dinheiro.</span></article>
-                <article class="module-card"><strong>Clientes</strong><span>Cadastro, histórico, limites e comunicação.</span></article>
-                <article class="module-card"><strong>Relatórios</strong><span>Lucro por produto, giro de estoque, impostos e dashboards.</span></article>
+                <article class="module-card"><strong>Propostas comerciais</strong><span>Disponível</span></article>
+                <article class="module-card"><strong>Compras FIEMG</strong><span>Disponível</span></article>
+                <article class="module-card"><strong>Vendas e pedidos</strong><span>Planejado</span></article>
+                <article class="module-card"><strong>Financeiro</strong><span>Planejado</span></article>
+                <article class="module-card"><strong>Relatórios gerenciais</strong><span>Planejado</span></article>
               </div>
             </div>
             <aside class="install-card">
@@ -455,7 +431,6 @@
               <h2>Usar como app</h2>
               <p>Em Android, use “Instalar app” quando aparecer no navegador. No iPhone, toque em compartilhar e depois “Adicionar à Tela de Início”.</p>
               <button class="primary" id="install-button" type="button" hidden>Instalar app</button>
-              <small>Depois de instalado, a plataforma abre em tela cheia e mantém a identidade visual da empresa.</small>
             </aside>
           </section>
         </section>
@@ -463,24 +438,20 @@
         <section class="view" id="auditoria">
           <section class="panel schema-panel">
             <div class="section-heading">
-              <span>Base preparada</span>
-              <h2>Modelo de dados da plataforma</h2>
+              <span>Rastreabilidade</span>
+              <h2>Registro de importações</h2>
             </div>
-            <div class="schema-grid">
-              <article><strong>produto_mestre</strong><span>GTIN/EAN, descrição, NCM, CEST, preço de compra, última compra, validade e status.</span></article>
-              <article><strong>documento_fiscal</strong><span>Chave, número, série, tipo, participante, totais e XML original.</span></article>
-              <article><strong>movimentacao_estoque</strong><span>Entrada ou saída, quantidade fiscal, valor, origem e usuário.</span></article>
-              <article><strong>lote_importacao</strong><span>Arquivo, data, resultado, erros, itens processados e duplicidades.</span></article>
-              <article><strong>auditoria</strong><span>Antes/depois, ação feita, data, usuário e vínculo com a NF-e.</span></article>
-              <article><strong>proposta_comercial</strong><span>Orçamentos sem impacto no estoque e sem criar produto mestre automaticamente.</span></article>
-            </div>
+            <div class="table-wrap"><table><thead><tr><th>Arquivo</th><th>Data</th><th>Resultado</th><th>Detalhes</th></tr></thead><tbody id="audit-rows"></tbody></table></div>
           </section>
         </section>
       </section>
     </main>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <button class="menu-backdrop" id="menu-backdrop" aria-label="Fechar menu" type="button" hidden></button>
+    <script src="./vendor/lucide.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="./app.js"></script>
+    <script src="./workspace.js"></script>
   </body>
 </html>

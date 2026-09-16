@@ -6,16 +6,34 @@ on:
       - main
     paths:
       - "supabase/**/*.sql"
+      - "scripts/sync-fiemg.cjs"
+      - "api/fiemg-import.js"
+      - ".github/workflows/supabase-sync.yml"
   workflow_dispatch:
+  schedule:
+    - cron: "7,22,37,52 * * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-fiemg-sync
+  cancel-in-progress: false
 
 jobs:
   sync:
     name: Aplicar SQL no Supabase
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - name: Baixar repositório
         uses: actions/checkout@v4
+
+      - name: Preparar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
 
       - name: Instalar cliente PostgreSQL
         run: |
@@ -43,13 +61,26 @@ jobs:
           psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -c "select current_database();"
 
       - name: Aplicar estrutura base
+        if: github.event_name != 'schedule'
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: |
           psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/schema.sql
 
       - name: Aplicar atualização do banco
+        if: github.event_name != 'schedule'
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: |
           psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/update_20260915.sql
+
+      - name: Preparar automação FIEMG
+        if: github.event_name != 'schedule'
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/fiemg_automation.sql
+
+      - name: Importar FIEMG automaticamente
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: node scripts/sync-fiemg.cjs

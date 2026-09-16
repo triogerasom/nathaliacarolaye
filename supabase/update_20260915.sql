@@ -47,6 +47,12 @@ create table if not exists public.fiemg_opportunities (
   process text not null,
   object text not null,
   entity text,
+  external_process_id bigint,
+  process_number text,
+  modality text,
+  portal_status text,
+  portal_group text,
+  item_count integer not null default 0,
   deadline date,
   estimated_value numeric(14, 2) not null default 0,
   status text not null default 'Mapeando',
@@ -57,9 +63,35 @@ create table if not exists public.fiemg_opportunities (
   unique (company_cnpj, process)
 );
 
+alter table public.fiemg_opportunities
+  add column if not exists external_process_id bigint,
+  add column if not exists process_number text,
+  add column if not exists modality text,
+  add column if not exists portal_status text,
+  add column if not exists portal_group text,
+  add column if not exists item_count integer not null default 0;
+
+create table if not exists public.fiemg_opportunity_items (
+  id uuid primary key default gen_random_uuid(),
+  opportunity_id uuid references public.fiemg_opportunities(id) on delete cascade,
+  company_cnpj text not null,
+  process text not null,
+  external_item_id bigint,
+  item_order integer,
+  description text not null,
+  quantity numeric(14, 4) not null default 0,
+  unit text,
+  reference_unit_price numeric(14, 4) not null default 0,
+  portal_status text,
+  phase text,
+  created_at timestamptz not null default now(),
+  unique (company_cnpj, process, external_item_id)
+);
+
 alter table public.participants enable row level security;
 alter table public.commercial_proposals enable row level security;
 alter table public.fiemg_opportunities enable row level security;
+alter table public.fiemg_opportunity_items enable row level security;
 
 drop policy if exists "authenticated users manage participants" on public.participants;
 create policy "authenticated users manage participants"
@@ -80,6 +112,14 @@ create policy "authenticated users manage commercial proposals"
 drop policy if exists "authenticated users manage fiemg opportunities" on public.fiemg_opportunities;
 create policy "authenticated users manage fiemg opportunities"
   on public.fiemg_opportunities
+  for all
+  to authenticated
+  using (true)
+  with check (true);
+
+drop policy if exists "authenticated users manage fiemg opportunity items" on public.fiemg_opportunity_items;
+create policy "authenticated users manage fiemg opportunity items"
+  on public.fiemg_opportunity_items
   for all
   to authenticated
   using (true)
