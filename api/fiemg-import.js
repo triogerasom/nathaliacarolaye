@@ -93,20 +93,25 @@ function cleanText(value) {
   return String(value || "").replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim();
 }
 
+function portalNumber(value, maximum = 9999999999) {
+  const parsed = Number(value || 0);
+  return Number.isFinite(parsed) && parsed >= 0 && parsed <= maximum ? parsed : 0;
+}
+
 async function hydrateProcess(process, includeItems) {
   const items = includeItems ? await fiemgPost(ITEMS_URL, buildItemsBody(process)) : [];
   const mappedItems = items.map((item) => ({
     externalItemId: Number(item.nCdItem || 0),
     order: Number(item.nCdItemSequencial || 0),
     description: cleanText(item.sDsItem),
-    quantity: Number(item.dQtItem || 0),
+    quantity: portalNumber(item.dQtItem),
     unit: cleanText(item.sDsUnidadeMedida),
-    referenceUnitPrice: Number(item.dVlReferencia || 0),
+    referenceUnitPrice: portalNumber(item.dVlReferencia),
     portalStatus: cleanText(item.sStItem),
     phase: cleanText(item.sStFase),
     attachmentId: Number(item.nCdAnexo || 0),
   }));
-  const referenceTotal = mappedItems.reduce((sum, item) => sum + item.quantity * item.referenceUnitPrice, 0);
+  const referenceTotal = Math.min(mappedItems.reduce((sum, item) => sum + item.quantity * item.referenceUnitPrice, 0), 999999999999.99);
   return {
     externalProcessId: Number(process.nCdProcesso || 0),
     processNumber: cleanText(process.sNrProcessoDisplay),
