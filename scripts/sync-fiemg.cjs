@@ -12,11 +12,20 @@ function executeSql(sql, env) {
   return new Promise((resolve, reject) => {
     const child = spawn('psql', ['-X', '-q', '-t', '-A', '-v', 'ON_ERROR_STOP=1'], { env, stdio: ['pipe', 'pipe', 'pipe'] });
     let output = '';
+    let diagnostics = '';
     child.stdout.on('data', (chunk) => { output += chunk; });
     // Database diagnostics may contain connection details; never forward them to public logs.
-    child.stderr.on('data', () => {});
+    child.stderr.on('data', (chunk) => { diagnostics += chunk; });
     child.on('error', () => reject(new Error('Não foi possível iniciar o cliente PostgreSQL.')));
-    child.on('close', (code) => code === 0 ? resolve(output.trim()) : reject(new Error('Falha ao gravar a sincronização no Supabase.')));
+    child.on('close', (code) => {
+      if (code === 0) return resolve(output.trim());
+      const redacted = env.PGPASSWORD ? diagnostics.replaceAll(env.PGPASSWORD, '[senha removida]') : diagnostics;
+      const sanitized = redacted
+        .replace(/(?:postgres(?:ql)?:\/\/)[^\s]+/gi, '[conexão removida]')
+        .trim()
+        .slice(-2500);
+      reject(new Error(`Falha ao gravar a sincronização no Supabase.${sanitized ? ` ${sanitized}` : ''}`));
+    });
     child.stdin.on('error', () => {});
     child.stdin.end(`SET standard_conforming_strings = on; SET statement_timeout = '180s';\n${sql}`);
   });

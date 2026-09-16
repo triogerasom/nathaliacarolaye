@@ -90,7 +90,7 @@ function buildItemsBody(process) {
 }
 
 function cleanText(value) {
-  return String(value || "").replace(/[\u0012\u0013]/g, "").replace(/\s+/g, " ").trim();
+  return String(value || "").replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim();
 }
 
 async function hydrateProcess(process, includeItems) {
