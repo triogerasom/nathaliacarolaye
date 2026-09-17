@@ -92,6 +92,10 @@ function toNumber(value) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function roundCurrency(value) {
+  return Math.round((Number(value) + Number.EPSILON) * 100) / 100;
+}
+
 function formatDate(value) {
   if (!value) return "-";
   const date = new Date(/^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T12:00:00` : value);
@@ -147,6 +151,37 @@ function fiscalConversion({ description, uCom, qCom, uTrib, qTrib, vProd, vUnTri
   };
 }
 
+function allocateFinalInvoiceValues(document) {
+  const items = document.items || [];
+  if (!items.length) return;
+  const productSubtotal = items.reduce((sum, item) => sum + Number(item.vProd || 0), 0);
+  const weights = items.map((item) => Math.max(Number(item.vProd || 0) - Number(item.vDesc || 0), 0));
+  const weightTotal = weights.reduce((sum, value) => sum + value, 0);
+  const finalTotal = Number(document.total || 0) > 0 ? Number(document.total) : productSubtotal;
+  const lastWeightedIndex = weightTotal > 0 ? weights.reduce((last, value, index) => value > 0 ? index : last, 0) : items.length - 1;
+  let allocated = 0;
+
+  items.forEach((item, index) => {
+    const weight = weightTotal > 0 ? weights[index] / weightTotal : 1 / items.length;
+    const finalValue = index === lastWeightedIndex ? roundCurrency(finalTotal - allocated) : roundCurrency(finalTotal * weight);
+    allocated = roundCurrency(allocated + finalValue);
+    item.finalInvoiceValue = finalValue;
+    item.invoiceAdjustment = roundCurrency(finalValue - Number(item.vProd || 0));
+    if (document.type === "entrada") {
+      const quantity = Number(item.fiscalQuantity || item.qTrib || item.qCom || 0);
+      item.finalPurchaseTotal = finalValue;
+      item.unitCost = quantity > 0 ? finalValue / quantity : 0;
+    } else {
+      const quantity = Number(item.qTrib || item.qCom || 0);
+      item.finalSaleTotal = finalValue;
+      item.unitSalePrice = quantity > 0 ? finalValue / quantity : 0;
+    }
+  });
+
+  document.productsSubtotal = productSubtotal;
+  document.finalAdjustment = roundCurrency(finalTotal - productSubtotal);
+}
+
 function validGtin(value) {
   const digits = onlyDigits(value);
   return [8, 12, 13, 14].includes(digits.length) && !/^0+$/.test(digits) ? digits : "";
@@ -198,6 +233,7 @@ function rebuildFiscalLedger() {
   });
 
   documents.forEach((document) => {
+    allocateFinalInvoiceValues(document);
     if (document.type === "entrada" && document.emit) suppliers[document.emit.cnpj || document.emit.name] = { ...document.emit, lastDocument: document.number, lastDate: document.issuedAt };
     if (document.type === "saida" && document.dest) customers[document.dest.cnpj || document.dest.name] = { ...document.dest, lastDocument: document.number, lastDate: document.issuedAt };
     document.items.forEach((item, itemIndex) => {
@@ -237,12 +273,13 @@ function rebuildFiscalLedger() {
       item.matchSource = resolution.source;
       if (document.type === "entrada") {
         const quantity = Number(item.fiscalQuantity || item.qTrib || item.qCom || 0);
-        const unitCost = quantity > 0 ? Number(item.vProd || 0) / quantity : Number(item.unitCost || item.vUnTrib || item.vUnCom || 0);
+        const purchaseTotal = Number(item.finalPurchaseTotal ?? item.vProd ?? 0);
+        const unitCost = quantity > 0 ? purchaseTotal / quantity : Number(item.unitCost || item.vUnTrib || item.vUnCom || 0);
         const stockBefore = Math.max(Number(product.stock || 0), 0);
         const valueBefore = stockBefore * Number(product.averageCost || product.lastPurchasePrice || 0);
         product.stock += quantity;
-        product.averageCost = stockBefore + quantity > 0 ? (valueBefore + Number(item.vProd || 0)) / (stockBefore + quantity) : unitCost;
-        product.totalCost += Number(item.vProd || 0);
+        product.averageCost = stockBefore + quantity > 0 ? (valueBefore + purchaseTotal) / (stockBefore + quantity) : unitCost;
+        product.totalCost += purchaseTotal;
         product.documents += 1;
         product.lastPurchase = document.issuedAt;
         product.lastPurchasePrice = unitCost;
@@ -251,14 +288,14 @@ function rebuildFiscalLedger() {
         product.cest = item.cest || product.cest;
         product.uTrib = item.fiscalUnit || item.uTrib || product.uTrib;
         product.cfop = item.cfop || product.cfop;
-        product.purchaseHistory.unshift({ date: document.issuedAt, supplier: document.emit?.name || "", supplierCnpj: document.emit?.cnpj || "", quantity, unitCost, total: Number(item.vProd || 0), documentKey: document.key, itemIndex, commercialQuantity: item.qCom, commercialUnit: item.uCom, conversion: item.conversion || 1 });
-        movements.push({ id: `${document.key}:${itemIndex}`, date: document.issuedAt, type: "entrada", productKey: resolution.key, product: product.description, quantity, unit: product.uTrib, commercialQuantity: item.qCom, commercialUnit: item.uCom, conversion: item.conversion || 1, unitCost, costTotal: Number(item.vProd || 0), revenue: 0, grossProfit: 0, itemIndex, documentKey: document.key, documentNumber: document.number, participant: document.emit?.name || document.participant, cfop: item.cfop, value: Number(item.vProd || 0) });
+        product.purchaseHistory.unshift({ date: document.issuedAt, supplier: document.emit?.name || "", supplierCnpj: document.emit?.cnpj || "", quantity, unitCost, total: purchaseTotal, productValue: Number(item.vProd || 0), invoiceAdjustment: Number(item.invoiceAdjustment || 0), documentKey: document.key, itemIndex, commercialQuantity: item.qCom, commercialUnit: item.uCom, conversion: item.conversion || 1 });
+        movements.push({ id: `${document.key}:${itemIndex}`, date: document.issuedAt, type: "entrada", productKey: resolution.key, product: product.description, quantity, unit: product.uTrib, commercialQuantity: item.qCom, commercialUnit: item.uCom, conversion: item.conversion || 1, unitCost, costTotal: purchaseTotal, productValue: Number(item.vProd || 0), invoiceAdjustment: Number(item.invoiceAdjustment || 0), revenue: 0, grossProfit: 0, itemIndex, documentKey: document.key, documentNumber: document.number, participant: document.emit?.name || document.participant, cfop: item.cfop, value: purchaseTotal });
       } else {
         const quantity = Number(item.qTrib || item.qCom || 0);
-        const unitSalePrice = quantity > 0 ? Number(item.vProd || 0) / quantity : Number(item.vUnTrib || item.vUnCom || 0);
+        const revenue = Number(item.finalSaleTotal ?? item.vProd ?? 0);
+        const unitSalePrice = quantity > 0 ? revenue / quantity : Number(item.vUnTrib || item.vUnCom || 0);
         const unitCost = Number(product.averageCost || product.lastPurchasePrice || 0);
         const costTotal = quantity * unitCost;
-        const revenue = Number(item.vProd || 0);
         const grossProfit = revenue - costTotal;
         product.stock -= quantity;
         product.salePrice = unitSalePrice || product.salePrice;
@@ -459,6 +496,7 @@ function parseNfe(xmlText) {
   const ide = xml.getElementsByTagName("ide")[0];
   const emit = xml.getElementsByTagName("emit")[0];
   const dest = xml.getElementsByTagName("dest")[0];
+  const totalNode = xml.getElementsByTagName("total")[0];
   const total = xml.getElementsByTagName("ICMSTot")[0];
   if (!infNFe || !ide || !emit || !dest) throw new Error("Não encontrei a estrutura principal da NF-e.");
 
@@ -489,6 +527,7 @@ function parseNfe(xmlText) {
       qCom,
       vUnCom: toNumber(text(prod, "vUnCom")),
       vProd,
+      vDesc: toNumber(text(prod, "vDesc")),
       uTrib: text(prod, "uTrib") || text(prod, "uCom") || "UNIDADE",
       qTrib,
       vUnTrib,
@@ -515,6 +554,21 @@ function parseNfe(xmlText) {
     participant: type === "entrada" ? emitData.name : destData.name,
     participantCnpj: type === "entrada" ? emitData.cnpj : destData.cnpj,
     total: toNumber(text(total, "vNF")),
+    costComposition: {
+      products: toNumber(text(total, "vProd")),
+      discount: toNumber(text(total, "vDesc")),
+      freight: toNumber(text(total, "vFrete")),
+      insurance: toNumber(text(total, "vSeg")),
+      other: toNumber(text(total, "vOutro")),
+      ipi: toNumber(text(total, "vIPI")),
+      icms: toNumber(text(total, "vICMS")),
+      icmsSt: toNumber(text(total, "vST")) || toNumber(text(total, "vICMSST")),
+      fcp: toNumber(text(total, "vFCP")),
+      fcpSt: toNumber(text(total, "vFCPST")),
+      importTax: toNumber(text(total, "vII")),
+      ibs: toNumber(text(totalNode, "vIBS")),
+      cbs: toNumber(text(totalNode, "vCBS")),
+    },
     items,
     xmlOriginal: xmlText,
   };
@@ -601,7 +655,7 @@ function renderStock() {
       <td>${escapeHtml(product.ncm || "-")}</td>
       <td>${escapeHtml(product.cest || "-")}</td>
       <td>${number.format(product.stock || 0)} ${escapeHtml(product.uTrib || "un")}</td>
-      <td><strong>${money.format(product.lastPurchasePrice || 0)}</strong><br><small>por ${escapeHtml(product.uTrib || "un")}</small></td>
+      <td><strong>${money.format(product.lastPurchasePrice || 0)}</strong><br><small>final da NF-e por ${escapeHtml(product.uTrib || "un")}</small></td>
       <td><strong>${money.format(product.salePrice || 0)}</strong><br><small>última venda</small></td>
       <td>${formatDate(product.lastPurchase)}</td>
       <td><input class="stock-input validity-input" data-product="${escapeHtml(product.key)}" type="date" value="${escapeHtml(product.validity || "")}" /></td>
@@ -623,20 +677,31 @@ function renderProducts() {
 }
 
 function renderDocuments() {
-  const rows = state.documents.map((doc) => `
-    <tr>
-      <td class="${doc.type === "entrada" ? "positive" : "negative"}">${doc.type}</td>
-      <td>${escapeHtml(doc.number)}/${escapeHtml(doc.series)}</td>
-      <td>${formatDate(doc.issuedAt)}</td>
-      <td>${escapeHtml(doc.participant)}</td>
-      <td>${maskKey(doc.key)}</td>
-      <td>${money.format(doc.total)}</td>
-    </tr>
-  `);
+  const rows = state.documents.map((doc) => {
+    allocateFinalInvoiceValues(doc);
+    const costDetails = doc.type === "entrada" ? `
+      <details class="document-cost-details">
+        <summary>Conferir custo final</summary>
+        <div><span>Produtos</span><strong>${money.format(doc.productsSubtotal || 0)}</strong></div>
+        <div><span>Ajuste rateado</span><strong>${Number(doc.finalAdjustment || 0) >= 0 ? "+" : ""}${money.format(doc.finalAdjustment || 0)}</strong></div>
+        <ul>${doc.items.map((item) => `<li><strong>${escapeHtml(item.description)}</strong><span>${money.format(item.vProd)} → ${money.format(item.finalPurchaseTotal)} · ${money.format(item.unitCost)}/${escapeHtml(item.fiscalUnit || item.uTrib || "UN")}</span></li>`).join("")}</ul>
+      </details>` : "";
+    return `
+      <tr>
+        <td class="${doc.type === "entrada" ? "positive" : "negative"}">${doc.type}</td>
+        <td>${escapeHtml(doc.number)}/${escapeHtml(doc.series)}</td>
+        <td>${formatDate(doc.issuedAt)}</td>
+        <td>${escapeHtml(doc.participant)}</td>
+        <td>${maskKey(doc.key)}</td>
+        <td><strong>${money.format(doc.total)}</strong>${costDetails}</td>
+      </tr>`;
+  });
   document.getElementById("document-rows").innerHTML = rows.join("") || emptyRow(6, "Nenhum documento fiscal importado.");
 }
 
 function renderImportResult(doc) {
+  allocateFinalInvoiceValues(doc);
+  const adjustment = Number(doc.finalAdjustment || 0);
   document.getElementById("import-result").innerHTML = `
     <div class="section-heading"><span>XML processado</span><h2>NF-e ${escapeHtml(doc.number)}/${escapeHtml(doc.series)} importada como ${escapeHtml(doc.type)}</h2></div>
     <div class="result-grid">
@@ -644,16 +709,17 @@ function renderImportResult(doc) {
       <div><span>Participante</span><strong>${escapeHtml(doc.participant)}</strong></div>
       <div><span>Data</span><strong>${formatDate(doc.issuedAt)}</strong></div>
       <div><span>Total</span><strong>${money.format(doc.total)}</strong></div>
+      ${doc.type === "entrada" ? `<div><span>Produtos antes do fechamento</span><strong>${money.format(doc.productsSubtotal || 0)}</strong></div><div><span>Ajuste final rateado</span><strong class="${adjustment >= 0 ? "positive" : "negative"}">${adjustment >= 0 ? "+" : ""}${money.format(adjustment)}</strong></div>` : ""}
     </div>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Produto</th><th>Compra</th><th>Estoque fiscal</th><th>Custo unitário</th><th>Conversão</th><th>Tributos</th></tr></thead>
+        <thead><tr><th>Produto</th><th>Valor final do item</th><th>Estoque fiscal</th><th>Custo unitário final</th><th>Conversão</th><th>Tributos</th></tr></thead>
         <tbody>${doc.items.map((item, index) => `
           <tr>
             <td><strong>${escapeHtml(item.description)}</strong><br><small>EAN ${escapeHtml(item.ean)} · NCM ${escapeHtml(item.ncm || "-")} · CFOP ${escapeHtml(item.cfop)}</small></td>
-            <td>${number.format(item.qCom)} ${escapeHtml(item.uCom)}</td>
+            <td><strong>${money.format(item.finalInvoiceValue ?? item.vProd)}</strong><br><small>Produto ${money.format(item.vProd)} · ajuste ${Number(item.invoiceAdjustment || 0) >= 0 ? "+" : ""}${money.format(item.invoiceAdjustment || 0)}</small></td>
             <td><strong>${number.format(doc.type === "entrada" ? (item.fiscalQuantity || item.qTrib) : item.qTrib)} ${escapeHtml(doc.type === "entrada" ? (item.fiscalUnit || item.uTrib) : item.uTrib)}</strong></td>
-            <td><strong>${money.format(doc.type === "entrada" ? (item.unitCost || item.vUnTrib || item.vUnCom) : item.vUnTrib)}</strong><br><small>valor do produto ÷ quantidade fiscal</small></td>
+            <td><strong>${money.format(doc.type === "entrada" ? (item.unitCost || item.vUnTrib || item.vUnCom) : (item.unitSalePrice || item.vUnTrib))}</strong><br><small>valor final rateado ÷ quantidade fiscal</small></td>
             <td>${doc.type === "entrada" ? `<label class="conversion-field"><span>1 ${escapeHtml(item.uCom)} =</span><input class="conversion-input" data-document="${escapeHtml(doc.key)}" data-item="${index}" type="number" min="0.0001" step="0.0001" value="${item.conversion || 1}" /><span>${escapeHtml(item.fiscalUnit || item.uTrib)}</span></label><small class="conversion-origin ${item.conversionNeedsReview ? "warning-copy" : ""}">${item.conversionSource === "xml" ? "Informada no XML" : item.conversionSource === "descricao" ? "Detectada na descrição; confira" : isPackageUnit(item.uCom) ? "Embalagem sem quantidade; informe" : "Sem conversão"}</small>` : `${number.format(item.conversion || 1)} ${escapeHtml(item.uTrib)}/${escapeHtml(item.uCom)}`}</td>
             <td>ICMS ${item.tax.vICMS || "-"} · ST ${item.tax.vICMSST || "-"} · PIS ${item.tax.vPIS || "-"} · COFINS ${item.tax.vCOFINS || "-"}</td>
           </tr>`).join("")}
@@ -730,7 +796,7 @@ function updateFiscalConversion(documentKey, itemIndex, factor) {
   item.conversion = factor;
   item.fiscalQuantity = newQuantity;
   item.fiscalUnit = factor > 1 ? "UN" : item.uTrib || item.uCom;
-  item.unitCost = item.vProd / newQuantity;
+  item.unitCost = Number(item.finalPurchaseTotal ?? item.vProd ?? 0) / newQuantity;
   item.conversionSource = "manual";
   item.conversionNeedsReview = false;
   rebuildFiscalLedger();

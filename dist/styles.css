@@ -157,6 +157,13 @@ td .stock-input { min-width:145px; }
 .fiemg-items summary { color:#3766a0; }
 .fiemg-items ul { padding-left:18px; min-width:240px; }
 .fiemg-items li { margin:10px 0; }
+.document-cost-details { margin-top:8px; min-width:250px; font-size:12px; }
+.document-cost-details summary { color:#3766a0; font-weight:700; cursor:pointer; }
+.document-cost-details div { display:flex; justify-content:space-between; gap:16px; margin-top:8px; }
+.document-cost-details div span { color:var(--muted); }
+.document-cost-details ul { margin:10px 0 0; padding:10px 0 0; border-top:1px solid var(--line); list-style:none; }
+.document-cost-details li { display:grid; gap:3px; padding:7px 0; }
+.document-cost-details li span { color:var(--muted); }
 .process-link { display:inline-flex; align-items:center; gap:6px; color:#245c97; text-decoration:none; }
 .process-link:hover { text-decoration:underline; }
 .process-link .lucide { width:14px; height:14px; }

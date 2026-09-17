@@ -1,4 +1,4 @@
-const CACHE_NAME = "nathalia-fiscal-executive-v5";
+const CACHE_NAME = "nathalia-fiscal-executive-v6";
 const APP_SHELL = [
   "./",
   "./index.html",
