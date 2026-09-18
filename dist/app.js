@@ -8,8 +8,11 @@ const COMPANY = {
 
 const AUTH_EMAIL = "eu15933220620@gmail.com";
 const INITIAL_PASSWORD_HASH = "9ee9988554a1e60b2b53c3478979dab72977d77ba42fee4432b4114ea8e7549e";
+const FISCAL_PARSER_VERSION = 2;
 const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+const unitMoney = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 2, maximumFractionDigits: 4 });
 const number = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 4 });
+const percent = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 2 });
 
 const SEBRAE_PRODUCT_HEADERS = [
   "CODIGO DE BARRAS", "TIPO DE PRODUTO", "DESCRICAO", "PRECO DE CUSTO",
@@ -155,18 +158,30 @@ function allocateFinalInvoiceValues(document) {
   const items = document.items || [];
   if (!items.length) return;
   const productSubtotal = items.reduce((sum, item) => sum + Number(item.vProd || 0), 0);
-  const weights = items.map((item) => Math.max(Number(item.vProd || 0) - Number(item.vDesc || 0), 0));
+  const components = items.map((item) => {
+    const discount = Number(item.vDesc || 0);
+    const additions = [item.vFrete, item.vSeg, item.vOutro, item.tax?.vIPI, item.tax?.vICMSST, item.tax?.vFCPST, item.tax?.vII, item.tax?.vIPIDevol, item.tax?.vIBS, item.tax?.vCBS, item.tax?.vIS]
+      .reduce((sum, value) => sum + Number(value || 0), 0);
+    return { discount, additions, identifiedValue: Math.max(Number(item.vProd || 0) - discount, 0) + additions };
+  });
+  const identifiedSubtotal = components.reduce((sum, component) => sum + component.identifiedValue, 0);
+  const finalTotal = Number(document.total || 0) > 0 ? Number(document.total) : identifiedSubtotal;
+  const residual = roundCurrency(finalTotal - identifiedSubtotal);
+  const weights = components.map((component) => Math.max(component.identifiedValue, 0));
   const weightTotal = weights.reduce((sum, value) => sum + value, 0);
-  const finalTotal = Number(document.total || 0) > 0 ? Number(document.total) : productSubtotal;
   const lastWeightedIndex = weightTotal > 0 ? weights.reduce((last, value, index) => value > 0 ? index : last, 0) : items.length - 1;
-  let allocated = 0;
+  let residualAllocated = 0;
 
   items.forEach((item, index) => {
     const weight = weightTotal > 0 ? weights[index] / weightTotal : 1 / items.length;
-    const finalValue = index === lastWeightedIndex ? roundCurrency(finalTotal - allocated) : roundCurrency(finalTotal * weight);
-    allocated = roundCurrency(allocated + finalValue);
+    const globalAllocation = index === lastWeightedIndex ? roundCurrency(residual - residualAllocated) : roundCurrency(residual * weight);
+    residualAllocated = roundCurrency(residualAllocated + globalAllocation);
+    const finalValue = roundCurrency(components[index].identifiedValue + globalAllocation);
     item.finalInvoiceValue = finalValue;
     item.invoiceAdjustment = roundCurrency(finalValue - Number(item.vProd || 0));
+    item.itemDiscount = components[index].discount;
+    item.itemAdditions = components[index].additions;
+    item.globalAllocation = globalAllocation;
     if (document.type === "entrada") {
       const quantity = Number(item.fiscalQuantity || item.qTrib || item.qCom || 0);
       item.finalPurchaseTotal = finalValue;
@@ -179,6 +194,9 @@ function allocateFinalInvoiceValues(document) {
   });
 
   document.productsSubtotal = productSubtotal;
+  document.itemDiscountTotal = components.reduce((sum, component) => sum + component.discount, 0);
+  document.itemAdditionTotal = components.reduce((sum, component) => sum + component.additions, 0);
+  document.unallocatedAdjustment = residual;
   document.finalAdjustment = roundCurrency(finalTotal - productSubtotal);
 }
 
@@ -220,8 +238,29 @@ function resolveProductKey(item, products, direction) {
   return { key: gtin || fallbackProductKey(item), source: gtin ? "gtin_novo" : "nao_conciliado" };
 }
 
+function refreshDocumentFromOriginalXml(document) {
+  if (!document.xmlOriginal || Number(document.parserVersion || 0) >= FISCAL_PARSER_VERSION) return;
+  try {
+    const previousItems = document.items || [];
+    const refreshed = parseNfe(document.xmlOriginal);
+    refreshed.items.forEach((item, index) => {
+      const previous = previousItems[index];
+      if (previous?.conversionSource !== "manual") return;
+      item.conversion = previous.conversion;
+      item.fiscalQuantity = previous.fiscalQuantity;
+      item.fiscalUnit = previous.fiscalUnit;
+      item.conversionSource = "manual";
+      item.conversionNeedsReview = false;
+    });
+    Object.assign(document, refreshed);
+  } catch (error) {
+    document.parserMigrationError = "Não foi possível reler o XML original.";
+  }
+}
+
 function rebuildFiscalLedger() {
   if (!state.documents?.length) return;
+  state.documents.forEach(refreshDocumentFromOriginalXml);
   const previousProducts = state.products || {};
   const products = {};
   const movements = [];
@@ -288,8 +327,8 @@ function rebuildFiscalLedger() {
         product.cest = item.cest || product.cest;
         product.uTrib = item.fiscalUnit || item.uTrib || product.uTrib;
         product.cfop = item.cfop || product.cfop;
-        product.purchaseHistory.unshift({ date: document.issuedAt, supplier: document.emit?.name || "", supplierCnpj: document.emit?.cnpj || "", quantity, unitCost, total: purchaseTotal, productValue: Number(item.vProd || 0), invoiceAdjustment: Number(item.invoiceAdjustment || 0), documentKey: document.key, itemIndex, commercialQuantity: item.qCom, commercialUnit: item.uCom, conversion: item.conversion || 1 });
-        movements.push({ id: `${document.key}:${itemIndex}`, date: document.issuedAt, type: "entrada", productKey: resolution.key, product: product.description, quantity, unit: product.uTrib, commercialQuantity: item.qCom, commercialUnit: item.uCom, conversion: item.conversion || 1, unitCost, costTotal: purchaseTotal, productValue: Number(item.vProd || 0), invoiceAdjustment: Number(item.invoiceAdjustment || 0), revenue: 0, grossProfit: 0, itemIndex, documentKey: document.key, documentNumber: document.number, participant: document.emit?.name || document.participant, cfop: item.cfop, value: purchaseTotal });
+        product.purchaseHistory.unshift({ date: document.issuedAt, supplier: document.emit?.name || "", supplierCnpj: document.emit?.cnpj || "", quantity, unitCost, total: purchaseTotal, productValue: Number(item.vProd || 0), itemDiscount: Number(item.itemDiscount || 0), itemAdditions: Number(item.itemAdditions || 0), globalAllocation: Number(item.globalAllocation || 0), invoiceAdjustment: Number(item.invoiceAdjustment || 0), documentKey: document.key, itemIndex, commercialQuantity: item.qCom, commercialUnit: item.uCom, conversion: item.conversion || 1 });
+        movements.push({ id: `${document.key}:${itemIndex}`, date: document.issuedAt, type: "entrada", productKey: resolution.key, product: product.description, quantity, unit: product.uTrib, commercialQuantity: item.qCom, commercialUnit: item.uCom, conversion: item.conversion || 1, unitCost, costTotal: purchaseTotal, productValue: Number(item.vProd || 0), itemDiscount: Number(item.itemDiscount || 0), itemAdditions: Number(item.itemAdditions || 0), globalAllocation: Number(item.globalAllocation || 0), invoiceAdjustment: Number(item.invoiceAdjustment || 0), revenue: 0, grossProfit: 0, itemIndex, documentKey: document.key, documentNumber: document.number, participant: document.emit?.name || document.participant, cfop: item.cfop, value: purchaseTotal });
       } else {
         const quantity = Number(item.qTrib || item.qCom || 0);
         const revenue = Number(item.finalSaleTotal ?? item.vProd ?? 0);
@@ -528,21 +567,31 @@ function parseNfe(xmlText) {
       vUnCom: toNumber(text(prod, "vUnCom")),
       vProd,
       vDesc: toNumber(text(prod, "vDesc")),
+      vFrete: toNumber(text(prod, "vFrete")),
+      vSeg: toNumber(text(prod, "vSeg")),
+      vOutro: toNumber(text(prod, "vOutro")),
       uTrib: text(prod, "uTrib") || text(prod, "uCom") || "UNIDADE",
       qTrib,
       vUnTrib,
       ...conversion,
       tax: imposto ? {
-        vICMS: text(imposto, "vICMS"),
-        vICMSST: text(imposto, "vICMSST"),
-        vIPI: text(imposto, "vIPI"),
-        vPIS: text(imposto, "vPIS"),
-        vCOFINS: text(imposto, "vCOFINS"),
+        vICMS: toNumber(text(imposto, "vICMS")),
+        vICMSST: toNumber(text(imposto, "vICMSST")),
+        vFCPST: toNumber(text(imposto, "vFCPST")),
+        vIPI: toNumber(text(imposto, "vIPI")),
+        vII: toNumber(text(imposto, "vII")),
+        vIPIDevol: toNumber(text(det, "vIPIDevol")),
+        vPIS: toNumber(text(imposto, "vPIS")),
+        vCOFINS: toNumber(text(imposto, "vCOFINS")),
+        vIBS: toNumber(text(imposto, "vIBS")),
+        vCBS: toNumber(text(imposto, "vCBS")),
+        vIS: toNumber(text(imposto, "vIS")),
       } : {},
     };
   });
 
   return {
+    parserVersion: FISCAL_PARSER_VERSION,
     key,
     type,
     number: text(ide, "nNF"),
@@ -553,7 +602,7 @@ function parseNfe(xmlText) {
     dest: destData,
     participant: type === "entrada" ? emitData.name : destData.name,
     participantCnpj: type === "entrada" ? emitData.cnpj : destData.cnpj,
-    total: toNumber(text(total, "vNF")),
+    total: toNumber(text(totalNode, "vNFTot")) || toNumber(text(total, "vNF")),
     costComposition: {
       products: toNumber(text(total, "vProd")),
       discount: toNumber(text(total, "vDesc")),
@@ -568,6 +617,8 @@ function parseNfe(xmlText) {
       importTax: toNumber(text(total, "vII")),
       ibs: toNumber(text(totalNode, "vIBS")),
       cbs: toNumber(text(totalNode, "vCBS")),
+      selectiveTax: toNumber(text(totalNode, "vIS")),
+      finalWithTaxReform: toNumber(text(totalNode, "vNFTot")),
     },
     items,
     xmlOriginal: xmlText,
@@ -655,8 +706,8 @@ function renderStock() {
       <td>${escapeHtml(product.ncm || "-")}</td>
       <td>${escapeHtml(product.cest || "-")}</td>
       <td>${number.format(product.stock || 0)} ${escapeHtml(product.uTrib || "un")}</td>
-      <td><strong>${money.format(product.lastPurchasePrice || 0)}</strong><br><small>final da NF-e por ${escapeHtml(product.uTrib || "un")}</small></td>
-      <td><strong>${money.format(product.salePrice || 0)}</strong><br><small>última venda</small></td>
+      <td><strong>${unitMoney.format(product.lastPurchasePrice || 0)}</strong><br><small>final da NF-e por ${escapeHtml(product.uTrib || "un")}</small></td>
+      <td><strong>${unitMoney.format(product.salePrice || 0)}</strong><br><small>última venda</small></td>
       <td>${formatDate(product.lastPurchase)}</td>
       <td><input class="stock-input validity-input" data-product="${escapeHtml(product.key)}" type="date" value="${escapeHtml(product.validity || "")}" /></td>
     </tr>
@@ -669,7 +720,7 @@ function renderProducts() {
     <article class="product-card">
       <strong>${escapeHtml(product.description)}</strong>
       <span>${escapeHtml(product.eanTrib)}</span>
-      <small>Compra ${money.format(product.lastPurchasePrice || 0)} · Venda ${money.format(product.salePrice || 0)} · Estoque ${number.format(product.stock || 0)} ${escapeHtml(product.uTrib || "un")} · Validade ${product.validity ? formatDate(product.validity) : "não informada"}</small>
+      <small>Compra ${unitMoney.format(product.lastPurchasePrice || 0)} · Venda ${unitMoney.format(product.salePrice || 0)} · Estoque ${number.format(product.stock || 0)} ${escapeHtml(product.uTrib || "un")} · Validade ${product.validity ? formatDate(product.validity) : "não informada"}</small>
       ${product.aliases?.length ? `<small class="reconciliation-note"><i data-lucide="link-2"></i> ${product.aliases.length} descrição de saída conciliada</small>` : ""}
     </article>
   `);
@@ -683,8 +734,10 @@ function renderDocuments() {
       <details class="document-cost-details">
         <summary>Conferir custo final</summary>
         <div><span>Produtos</span><strong>${money.format(doc.productsSubtotal || 0)}</strong></div>
-        <div><span>Ajuste rateado</span><strong>${Number(doc.finalAdjustment || 0) >= 0 ? "+" : ""}${money.format(doc.finalAdjustment || 0)}</strong></div>
-        <ul>${doc.items.map((item) => `<li><strong>${escapeHtml(item.description)}</strong><span>${money.format(item.vProd)} → ${money.format(item.finalPurchaseTotal)} · ${money.format(item.unitCost)}/${escapeHtml(item.fiscalUnit || item.uTrib || "UN")}</span></li>`).join("")}</ul>
+        <div><span>Descontos nos itens</span><strong>-${money.format(doc.itemDiscountTotal || 0)}</strong></div>
+        <div><span>Acréscimos nos itens</span><strong>+${money.format(doc.itemAdditionTotal || 0)}</strong></div>
+        <div><span>Ajuste global rateado</span><strong>${Number(doc.unallocatedAdjustment || 0) >= 0 ? "+" : ""}${money.format(doc.unallocatedAdjustment || 0)}</strong></div>
+        <ul>${doc.items.map((item) => `<li><strong>${escapeHtml(item.description)}</strong><span>${money.format(item.vProd)} - ${money.format(item.itemDiscount || 0)} + ${money.format(item.itemAdditions || 0)} ${Number(item.globalAllocation || 0) >= 0 ? "+" : "-"} ${money.format(Math.abs(item.globalAllocation || 0))} = ${money.format(item.finalPurchaseTotal)} · ${unitMoney.format(item.unitCost)}/${escapeHtml(item.fiscalUnit || item.uTrib || "UN")}</span></li>`).join("")}</ul>
       </details>` : "";
     return `
       <tr>
@@ -701,7 +754,7 @@ function renderDocuments() {
 
 function renderImportResult(doc) {
   allocateFinalInvoiceValues(doc);
-  const adjustment = Number(doc.finalAdjustment || 0);
+  const globalAdjustment = Number(doc.unallocatedAdjustment || 0);
   document.getElementById("import-result").innerHTML = `
     <div class="section-heading"><span>XML processado</span><h2>NF-e ${escapeHtml(doc.number)}/${escapeHtml(doc.series)} importada como ${escapeHtml(doc.type)}</h2></div>
     <div class="result-grid">
@@ -709,7 +762,7 @@ function renderImportResult(doc) {
       <div><span>Participante</span><strong>${escapeHtml(doc.participant)}</strong></div>
       <div><span>Data</span><strong>${formatDate(doc.issuedAt)}</strong></div>
       <div><span>Total</span><strong>${money.format(doc.total)}</strong></div>
-      ${doc.type === "entrada" ? `<div><span>Produtos antes do fechamento</span><strong>${money.format(doc.productsSubtotal || 0)}</strong></div><div><span>Ajuste final rateado</span><strong class="${adjustment >= 0 ? "positive" : "negative"}">${adjustment >= 0 ? "+" : ""}${money.format(adjustment)}</strong></div>` : ""}
+      ${doc.type === "entrada" ? `<div><span>Produtos antes do fechamento</span><strong>${money.format(doc.productsSubtotal || 0)}</strong></div><div><span>Descontos identificados</span><strong class="negative">-${money.format(doc.itemDiscountTotal || 0)}</strong></div><div><span>Acréscimos identificados</span><strong class="positive">+${money.format(doc.itemAdditionTotal || 0)}</strong></div><div><span>Ajuste global rateado</span><strong class="${globalAdjustment >= 0 ? "positive" : "negative"}">${globalAdjustment >= 0 ? "+" : ""}${money.format(globalAdjustment)}</strong></div>` : ""}
     </div>
     <div class="table-wrap">
       <table>
@@ -717,9 +770,9 @@ function renderImportResult(doc) {
         <tbody>${doc.items.map((item, index) => `
           <tr>
             <td><strong>${escapeHtml(item.description)}</strong><br><small>EAN ${escapeHtml(item.ean)} · NCM ${escapeHtml(item.ncm || "-")} · CFOP ${escapeHtml(item.cfop)}</small></td>
-            <td><strong>${money.format(item.finalInvoiceValue ?? item.vProd)}</strong><br><small>Produto ${money.format(item.vProd)} · ajuste ${Number(item.invoiceAdjustment || 0) >= 0 ? "+" : ""}${money.format(item.invoiceAdjustment || 0)}</small></td>
+            <td><strong>${money.format(item.finalInvoiceValue ?? item.vProd)}</strong><br><small>Produto ${money.format(item.vProd)} · desconto -${money.format(item.itemDiscount || 0)} · acréscimos +${money.format(item.itemAdditions || 0)} · rateio ${Number(item.globalAllocation || 0) >= 0 ? "+" : "-"}${money.format(Math.abs(item.globalAllocation || 0))}</small></td>
             <td><strong>${number.format(doc.type === "entrada" ? (item.fiscalQuantity || item.qTrib) : item.qTrib)} ${escapeHtml(doc.type === "entrada" ? (item.fiscalUnit || item.uTrib) : item.uTrib)}</strong></td>
-            <td><strong>${money.format(doc.type === "entrada" ? (item.unitCost || item.vUnTrib || item.vUnCom) : (item.unitSalePrice || item.vUnTrib))}</strong><br><small>valor final rateado ÷ quantidade fiscal</small></td>
+            <td><strong>${unitMoney.format(doc.type === "entrada" ? (item.unitCost || item.vUnTrib || item.vUnCom) : (item.unitSalePrice || item.vUnTrib))}</strong><br><small>valor final do item ÷ quantidade fiscal</small></td>
             <td>${doc.type === "entrada" ? `<label class="conversion-field"><span>1 ${escapeHtml(item.uCom)} =</span><input class="conversion-input" data-document="${escapeHtml(doc.key)}" data-item="${index}" type="number" min="0.0001" step="0.0001" value="${item.conversion || 1}" /><span>${escapeHtml(item.fiscalUnit || item.uTrib)}</span></label><small class="conversion-origin ${item.conversionNeedsReview ? "warning-copy" : ""}">${item.conversionSource === "xml" ? "Informada no XML" : item.conversionSource === "descricao" ? "Detectada na descrição; confira" : isPackageUnit(item.uCom) ? "Embalagem sem quantidade; informe" : "Sem conversão"}</small>` : `${number.format(item.conversion || 1)} ${escapeHtml(item.uTrib)}/${escapeHtml(item.uCom)}`}</td>
             <td>ICMS ${item.tax.vICMS || "-"} · ST ${item.tax.vICMSST || "-"} · PIS ${item.tax.vPIS || "-"} · COFINS ${item.tax.vCOFINS || "-"}</td>
           </tr>`).join("")}
@@ -761,7 +814,7 @@ function renderFinancial() {
     ["Entradas por vendas", money.format(sales), "Receita das NF-e de saída", "arrow-down-left"],
     ["Saídas por compras", money.format(purchases), "Valor das NF-e de entrada", "arrow-up-right"],
     ["Custo das vendas", money.format(costOfSales), "Custo médio dos produtos vendidos", "package-check"],
-    ["Lucro bruto", money.format(grossProfit), `${number.format(margin)}% de margem bruta`, "chart-no-axes-combined"],
+    ["Lucro bruto", money.format(grossProfit), `${percent.format(margin)}% de margem bruta`, "chart-no-axes-combined"],
   ];
   container.innerHTML = cards.map(([label, value, hint, icon]) => `<article class="kpi-card"><span>${label}<i data-lucide="${icon}"></i></span><strong>${value}</strong><small>${hint}</small></article>`).join("");
   const rows = [...state.documents].sort((a, b) => String(b.issuedAt || "").localeCompare(String(a.issuedAt || ""))).map((document) => {
@@ -803,7 +856,7 @@ function updateFiscalConversion(documentKey, itemIndex, factor) {
   saveState();
   render();
   renderImportResult(doc);
-  showToast(`Conversão atualizada: ${number.format(newQuantity)} ${item.fiscalUnit} a ${money.format(item.unitCost)} por unidade.`);
+  showToast(`Conversão atualizada: ${number.format(newQuantity)} ${item.fiscalUnit} a ${unitMoney.format(item.unitCost)} por unidade.`);
 }
 
 function renderFiemg() {
