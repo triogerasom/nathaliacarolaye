@@ -1,0 +1,24 @@
+{
+  "id": "./",
+  "name": "Casa & Obra – Finanças",
+  "short_name": "Casa & Obra",
+  "description": "Finanças pessoais, obra, contas, agenda e previsão de saldo.",
+  "lang": "pt-BR",
+  "start_url": "./?tab=home",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f3f5f4",
+  "theme_color": "#1f6fe5",
+  "categories": ["finance","productivity"],
+  "icons": [
+    {"src":"./icons/icon-192.png","sizes":"192x192","type":"image/png"},
+    {"src":"./icons/icon-512.png","sizes":"512x512","type":"image/png"},
+    {"src":"./icons/icon-maskable-512.png","sizes":"512x512","type":"image/png","purpose":"maskable"}
+  ],
+  "shortcuts": [
+    {"name":"Agenda","short_name":"Agenda","url":"./?tab=agenda","icons":[{"src":"./icons/icon-192.png","sizes":"192x192"}]},
+    {"name":"Obra","short_name":"Obra","url":"./?tab=obra","icons":[{"src":"./icons/icon-192.png","sizes":"192x192"}]},
+    {"name":"Contas","short_name":"Contas","url":"./?tab=contas","icons":[{"src":"./icons/icon-192.png","sizes":"192x192"}]}
+  ]
+}
