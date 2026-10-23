@@ -16,7 +16,7 @@ permissions:
 
 concurrency:
   group: casa-obra-supabase
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   deploy:
@@ -91,7 +91,7 @@ jobs:
           node <<'NODE'
           (async()=>{
             const url='https://' + process.env.SUPABASE_PROJECT_ID + '.supabase.co/functions/v1/push-notify';
-            const res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode:'vapid-key'})});
+            const res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode:'vapid-key'}),signal:AbortSignal.timeout(15000)});
             const data=await res.json().catch(()=>({}));
             if(!res.ok || !data.publicKey){console.error('Smoke test failed',res.status,data);process.exit(1)}
             console.log('Edge Function is online.');
