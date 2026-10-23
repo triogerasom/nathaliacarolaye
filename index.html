@@ -11,6 +11,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Casa & Obra">
 <link rel="manifest" href="./manifest.webmanifest">
+<link rel="stylesheet" href="./v5.css">
 <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
 <script src="./supabase-config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -480,7 +481,11 @@ async function exportBackup(){try{const txt=JSON.stringify(backupPayload());cons
 function importBackup(){const i=document.createElement('input');i.type='file';i.accept='application/json,.json';i.onchange=async()=>{const f=i.files?.[0];if(!f)return;try{const b=JSON.parse(await f.text());if(!b||!b.fin||!Array.isArray(b.fin.tx))throw new Error('invalid');M(`<h2>Restaurar backup?</h2><div class="mu">O arquivo é de <b>${esc(b.app||'Casa & Obra')}</b>${b.exportedAt?' · '+new Date(b.exportedAt).toLocaleString('pt-BR'):''}. A restauração substituirá os dados atuais deste aparelho.</div><button class="pri" onclick="applyBackup()">Restaurar agora</button>${btns()}`);md.backup=b}catch(e){toast('Arquivo de backup inválido.')}};i.click()}
 function applyBackup(){const b=md.backup;if(!b?.fin)return;S=Object.assign({tx:[],budget:0,obraIni:0,obraDt:'',acc:[],rec:[],pd:{},alog:[],ev:[],vr:[],vlog:[]},b.fin);save();try{Object.keys(localStorage).filter(k=>k.startsWith('fatt_')).forEach(k=>localStorage.removeItem(k));Object.entries(b.attachments||{}).forEach(([k,v])=>localStorage.setItem(k,v));if(b.settings?.ui_theme)localStorage.setItem('ui_theme',b.settings.ui_theme)}catch(e){}closeM();restoreTheme();cloudMigrateLocalAttachments();render();toast('Backup restaurado com sucesso.')}
 function showInternalOverlay(title,message,action){M(`<h2>${esc(title)}</h2><div style="line-height:1.5">${esc(message)}</div>${action?`<button class="pri" onclick="${action};closeM()">Abrir</button>`:''}${btns().replace('Cancelar','Fechar')}`)}
-$('#md').onclick=e=>{if(e.target.id==='md')closeM()};vrTick();
+$('#md').onclick=e=>{if(e.target.id==='md')closeM()};
+</script>
+<script src="./v5.js.gz"></script>
+<script>
+vrTick();
 bootstrapApp();
 </script>
 </body>
