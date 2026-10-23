@@ -6,6 +6,14 @@ on:
       - casa-obra-v4-sync
     paths:
       - ".github/workflows/casa-obra-production-test.yml"
+      - "index.html"
+      - "v5-*.js"
+      - "v5-extra.js"
+      - "v6.js"
+      - "v5.css"
+      - "sw.js"
+      - "vercel.json"
+      - "dist/**"
   workflow_dispatch:
 
 permissions:
@@ -57,6 +65,16 @@ jobs:
           grep -q "Filtros avançados" /tmp/v5.js
           grep -q "Meus avisos" /tmp/v5.js
           echo "V5_BUNDLE_OK=YES"
+
+          echo "=== V6 STAGED ASSET ==="
+          V6_CODE="$(curl -sS -L --max-time 20 -o /tmp/v6.js -w "%{http_code}" "$SITE/v6.js")"
+          echo "HTTP_V6=$V6_CODE"
+          test "$V6_CODE" = "200"
+          node --check /tmp/v6.js
+          grep -q "Casa & Obra V6" /tmp/v6.js
+          grep -q "rebuildFinancialState" /tmp/v6.js
+          grep -q "appBackV6" /tmp/v6.js
+          echo "V6_STAGE_OK=YES"
 
           echo "=== MANIFEST ==="
           MANIFEST_CODE="$(curl -sS -L --max-time 20 -o /tmp/manifest.webmanifest -w "%{http_code}" "$SITE/manifest.webmanifest")"
