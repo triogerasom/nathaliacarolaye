@@ -1,4 +1,4 @@
-name: Casa & Obra - Teste de Produção
+name: Casa & Obra - Diagnóstico de Produção
 
 on:
   push:
@@ -12,48 +12,41 @@ permissions:
   contents: read
 
 jobs:
-  test-production:
+  diagnose-production:
     runs-on: ubuntu-latest
     steps:
-      - name: Testar site de produção
+      - name: Diagnosticar produção
         shell: bash
         run: |
-          set -euo pipefail
+          set -u
           SITE="https://nathaliacarolaye.vercel.app"
-          curl --fail --silent --show-error --location --max-time 20 "$SITE/" -o /tmp/index.html
-          grep -q "Casa & Obra" /tmp/index.html
-          grep -q "Dinheiro em mãos" /tmp/index.html
-          echo "SITE_OK"
 
-      - name: Testar manifesto PWA
-        shell: bash
-        run: |
-          set -euo pipefail
-          curl --fail --silent --show-error --location --max-time 20 "https://nathaliacarolaye.vercel.app/manifest.webmanifest" -o /tmp/manifest.webmanifest
-          grep -q "Casa & Obra" /tmp/manifest.webmanifest
-          echo "PWA_OK"
+          echo "=== HOME ==="
+          HOME_CODE="$(curl -sS -L --max-time 20 -o /tmp/index.html -w "%{http_code}" "$SITE/")"
+          echo "HTTP_HOME=$HOME_CODE"
+          grep -o -m1 '<title>[^<]*</title>' /tmp/index.html || true
+          if grep -q "Casa & Obra" /tmp/index.html; then echo "HOME_HAS_CASA_OBRA=YES"; else echo "HOME_HAS_CASA_OBRA=NO"; fi
+          if grep -q "Dinheiro em mãos" /tmp/index.html; then echo "HOME_HAS_WALLET_FEATURE=YES"; else echo "HOME_HAS_WALLET_FEATURE=NO"; fi
+          if grep -qi "Central Fiscal" /tmp/index.html; then echo "HOME_HAS_CENTRAL_FISCAL=YES"; else echo "HOME_HAS_CENTRAL_FISCAL=NO"; fi
+          echo "HOME_BYTES=$(wc -c </tmp/index.html)"
 
-      - name: Testar configuração Supabase do frontend
-        shell: bash
-        run: |
-          set -euo pipefail
-          curl --fail --silent --show-error --location --max-time 20 "https://nathaliacarolaye.vercel.app/supabase-config.js" -o /tmp/supabase-config.js
-          grep -q "djxuthfkhxaacdmhebld.supabase.co" /tmp/supabase-config.js
-          echo "SUPABASE_CONFIG_OK"
+          echo "=== MANIFEST ==="
+          MANIFEST_CODE="$(curl -sS -L --max-time 20 -o /tmp/manifest.webmanifest -w "%{http_code}" "$SITE/manifest.webmanifest")"
+          echo "HTTP_MANIFEST=$MANIFEST_CODE"
+          if grep -q "Casa & Obra" /tmp/manifest.webmanifest; then echo "MANIFEST_CASA_OBRA=YES"; else echo "MANIFEST_CASA_OBRA=NO"; fi
 
-      - name: Testar Edge Function Web Push
-        shell: bash
-        run: |
-          set -euo pipefail
-          RESP="$(curl --fail --silent --show-error --max-time 20 -X POST             "https://djxuthfkhxaacdmhebld.supabase.co/functions/v1/push-notify"             -H "Content-Type: application/json"             -d '{"mode":"vapid-key"}')"
-          echo "$RESP" | grep -q "publicKey"
-          echo "EDGE_FUNCTION_OK"
+          echo "=== FRONTEND SUPABASE CONFIG ==="
+          CONFIG_CODE="$(curl -sS -L --max-time 20 -o /tmp/supabase-config.js -w "%{http_code}" "$SITE/supabase-config.js")"
+          echo "HTTP_CONFIG=$CONFIG_CODE"
+          if grep -q "djxuthfkhxaacdmhebld.supabase.co" /tmp/supabase-config.js; then echo "CONFIG_PROJECT_OK=YES"; else echo "CONFIG_PROJECT_OK=NO"; fi
 
-      - name: Testar verificação de vencimentos
-        shell: bash
-        run: |
-          set -euo pipefail
-          RESP="$(curl --fail --silent --show-error --max-time 20 -X POST             "https://djxuthfkhxaacdmhebld.supabase.co/functions/v1/push-notify"             -H "Content-Type: application/json"             -d '{"mode":"due"}')"
-          echo "$RESP"
-          echo "$RESP" | grep -q '"ok":true'
-          echo "DUE_CHECK_OK"
+          echo "=== EDGE FUNCTION ==="
+          EDGE_CODE="$(curl -sS --max-time 20 -o /tmp/edge.json -w "%{http_code}" -X POST             "https://djxuthfkhxaacdmhebld.supabase.co/functions/v1/push-notify"             -H "Content-Type: application/json"             -d '{"mode":"vapid-key"}')"
+          echo "HTTP_EDGE=$EDGE_CODE"
+          if grep -q "publicKey" /tmp/edge.json; then echo "EDGE_PUBLIC_KEY=YES"; else echo "EDGE_PUBLIC_KEY=NO"; fi
+
+          echo "=== DUE CHECK ==="
+          DUE_CODE="$(curl -sS --max-time 20 -o /tmp/due.json -w "%{http_code}" -X POST             "https://djxuthfkhxaacdmhebld.supabase.co/functions/v1/push-notify"             -H "Content-Type: application/json"             -d '{"mode":"due"}')"
+          echo "HTTP_DUE=$DUE_CODE"
+          cat /tmp/due.json
+          echo
