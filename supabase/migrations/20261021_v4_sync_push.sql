@@ -43,3 +43,12 @@ create table if not exists public.notification_dispatch_log (
   dedupe_key text primary key,
   created_at timestamptz not null default now()
 );
+
+
+create table if not exists public.backend_runtime_config (
+  name text primary key,
+  config_value text not null,
+  updated_at timestamptz not null default now()
+);
+alter table public.backend_runtime_config enable row level security;
+revoke all on table public.backend_runtime_config from anon, authenticated;
