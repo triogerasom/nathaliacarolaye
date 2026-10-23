@@ -1,0 +1,59 @@
+name: Casa & Obra - Teste de Produção
+
+on:
+  push:
+    branches:
+      - casa-obra-v4-sync
+    paths:
+      - ".github/workflows/casa-obra-production-test.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-production:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Testar site de produção
+        shell: bash
+        run: |
+          set -euo pipefail
+          SITE="https://nathaliacarolaye.vercel.app"
+          curl --fail --silent --show-error --location --max-time 20 "$SITE/" -o /tmp/index.html
+          grep -q "Casa & Obra" /tmp/index.html
+          grep -q "Dinheiro em mãos" /tmp/index.html
+          echo "SITE_OK"
+
+      - name: Testar manifesto PWA
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location --max-time 20 "https://nathaliacarolaye.vercel.app/manifest.webmanifest" -o /tmp/manifest.webmanifest
+          grep -q "Casa & Obra" /tmp/manifest.webmanifest
+          echo "PWA_OK"
+
+      - name: Testar configuração Supabase do frontend
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location --max-time 20 "https://nathaliacarolaye.vercel.app/supabase-config.js" -o /tmp/supabase-config.js
+          grep -q "djxuthfkhxaacdmhebld.supabase.co" /tmp/supabase-config.js
+          echo "SUPABASE_CONFIG_OK"
+
+      - name: Testar Edge Function Web Push
+        shell: bash
+        run: |
+          set -euo pipefail
+          RESP="$(curl --fail --silent --show-error --max-time 20 -X POST             "https://djxuthfkhxaacdmhebld.supabase.co/functions/v1/push-notify"             -H "Content-Type: application/json"             -d '{"mode":"vapid-key"}')"
+          echo "$RESP" | grep -q "publicKey"
+          echo "EDGE_FUNCTION_OK"
+
+      - name: Testar verificação de vencimentos
+        shell: bash
+        run: |
+          set -euo pipefail
+          RESP="$(curl --fail --silent --show-error --max-time 20 -X POST             "https://djxuthfkhxaacdmhebld.supabase.co/functions/v1/push-notify"             -H "Content-Type: application/json"             -d '{"mode":"due"}')"
+          echo "$RESP"
+          echo "$RESP" | grep -q '"ok":true'
+          echo "DUE_CHECK_OK"
