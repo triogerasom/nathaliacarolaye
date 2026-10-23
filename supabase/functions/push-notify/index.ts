@@ -18,8 +18,8 @@ const rawPublic = ecdh.getPublicKey(null,"uncompressed");
 const b64url = (b:Uint8Array) => Buffer.from(b).toString("base64").replace(/=/g,"").replace(/\+/g,"-").replace(/\//g,"_");
 const x=b64url(rawPublic.subarray(1,33)), y=b64url(rawPublic.subarray(33,65)), d=b64url(privateBytes);
 const vapidKeys = await importVapidKeys({
-  publicKey:{kty:"EC",crv:"P-256",x,y,ext:true,key_ops:["verify"]},
-  privateKey:{kty:"EC",crv:"P-256",x,y,d,ext:true,key_ops:["sign"]}
+  publicKey:{kty:"EC",crv:"P-256",alg:"ES256",x,y,ext:true,key_ops:["verify"]},
+  privateKey:{kty:"EC",crv:"P-256",alg:"ES256",x,y,d,ext:true,key_ops:["sign"]}
 });
 const VAPID_PUBLIC_KEY = await exportApplicationServerKey(vapidKeys);
 const appServer = await ApplicationServer.new({contactInformation:VAPID_SUBJECT,vapidKeys});
