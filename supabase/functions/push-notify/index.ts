@@ -127,9 +127,11 @@ Deno.serve(async req => {
   if(body.mode==="due"){
     if(req.headers.get("x-cron-secret")!==CRON_SECRET)return json({error:"forbidden"},403);
     const {date,time}=spNow();
-    const slots=new Set(["08:20","09:50","11:20","12:50","14:20","15:50","17:20","18:50","20:20","21:50","23:20"]);
-    if(!slots.has(time))return json({ok:true,skipped:true,date,time});
-    const dedupe=`due:${date}:${time}`;
+    const slots=["08:20","09:50","11:20","12:50","14:20","15:50","17:20","18:50","20:20","21:50","23:20"];
+    const nowMin=Number(time.slice(0,2))*60+Number(time.slice(3,5));
+    const slot=slots.find(s=>{const m=Number(s.slice(0,2))*60+Number(s.slice(3,5));return nowMin>=m&&nowMin<m+15});
+    if(!slot)return json({ok:true,skipped:true,date,time});
+    const dedupe=`due:${date}:${slot}`;
     const {error:logErr}=await admin.from("notification_dispatch_log").insert({dedupe_key:dedupe});
     if(logErr?.code==="23505")return json({ok:true,duplicate:true});
     if(logErr)throw logErr;
@@ -145,7 +147,7 @@ Deno.serve(async req => {
       title:`${due.length} despesa${due.length>1?"s":""} pendente${due.length>1?"s":""}`,
       body:`${money(total)} vencendo hoje · ${sample}${due.length>3?" · …":""}`,
       url:`${APP_URL}/?tab=home`,
-      tag:`due-${date}-${time}`,
+      tag:`due-${date}-${slot}`,
       renotify:true
     };
     return json({ok:true,sent:await sendAll(payload),count:due.length,total});
