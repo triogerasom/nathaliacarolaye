@@ -107,7 +107,7 @@ Deno.serve(async req => {
   let body:any={};
   try{body=await req.json()}catch{}
 
-  if(body.mode==="broadcast"){
+  if(body.mode==="vapid-key"){ return json({publicKey:VAPID_PUBLIC_KEY}); }\n\n  if(body.mode==="broadcast"){
     const user=await authUser(req);
     if(!user)return json({error:"unauthorized"},401);
     const rawUrl=String(body.url||"");
