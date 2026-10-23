@@ -40,7 +40,7 @@ async function getPushRuntime(){
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-cron-secret",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-reminder-token",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
@@ -93,6 +93,59 @@ function dueExpenses(state:any,date:string){
   for(const x of state.tx||[]) if(x.type==="out" && x.date===date) out.push({...x,_payKey:`${x.id}|${date}`});
   for(const r of state.rec||[]) if(r.type==="out" && occurs(r,date)) out.push({...r,date,id:`r${r.id}`,rec:1,_payKey:`r${r.id}|${date}`});
   return out.filter(x=>!state.pd?.[x._payKey]);
+}
+function addDate(date:string,days:number){
+  const [y,m,d]=date.split('-').map(Number),dt=new Date(Date.UTC(y,m-1,d+days));
+  return dt.toISOString().slice(0,10);
+}
+function eventsOn(state:any,date:string){
+  const out:any[]=[];
+  for(const x of state.tx||[]) if(x.date===date) out.push({...x,_payKey:`${x.id}|${date}`});
+  for(const r of state.rec||[]) if(occurs(r,date)) out.push({...r,date,id:`r${r.id}`,rec:1,_recId:r.id,_payKey:`r${r.id}|${date}`});
+  return out;
+}
+function pendingOn(state:any,date:string,type?:string){
+  return eventsOn(state,date).filter(x=>(!type||x.type===type)&&!state.pd?.[x._payKey]);
+}
+function rangeEvents(state:any,start:string,end:string,maxDays=800){
+  const out:any[]=[];let d=start,i=0;
+  while(d<=end&&i++<maxDays){out.push(...eventsOn(state,d));d=addDate(d,1)}
+  return out;
+}
+function walletTotal(state:any){
+  return (state.acc||[]).reduce((t:number,x:any)=>t+Number(x.val||0),0)
+    +(state.vr||[]).reduce((t:number,x:any)=>t+Number(x.val||0),0)
+    +Number(state.cash||0);
+}
+async function claimDispatch(key:string){
+  const {error}=await admin.from('notification_dispatch_log').insert({dedupe_key:key});
+  if(error?.code==='23505')return false;
+  if(error)throw error;
+  return true;
+}
+async function dispatchOnce(key:string,payload:any){
+  if(!(await claimDispatch(key)))return 0;
+  return await sendAll(payload);
+}
+function budgetAlerts(state:any,date:string){
+  const alerts:any[]=[];
+  for(const b of state.v5?.categoryBudgets||[]){
+    const start=b.start||date,end=b.end||date,limit=Number(b.limit||0);
+    if(!limit||date<start||date>end)continue;
+    const total=rangeEvents(state,start,end).filter((x:any)=>x.type==='out'&&(b.scope==='all'||!b.scope||x.scope===b.scope)&&(!b.cat||x.cat===b.cat)).reduce((t:number,x:any)=>t+Number(x.val||0),0);
+    if(total>limit)alerts.push({name:b.name||b.cat||'Orçamento',total,limit,over:total-limit});
+  }
+  return alerts;
+}
+function lowCashProjection(state:any,date:string){
+  let bal=walletTotal(state),min=bal,minDate=date,firstNegative='';
+  for(let i=1;i<=7;i++){
+    const d=addDate(date,i);
+    for(const x of pendingOn(state,d)) bal+=x.type==='in'?Number(x.val||0):-Number(x.val||0);
+    if(bal<min){min=bal;minDate=d}
+    if(!firstNegative&&bal<0)firstNegative=d;
+  }
+  return {balance:bal,min,minDate,firstNegative};
 }
 async function sendAll(payload:any){
   const {appServer}=await getPushRuntime();
