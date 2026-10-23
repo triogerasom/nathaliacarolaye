@@ -1,4 +1,4 @@
-name: Casa & Obra - Lembretes de vencimento
+name: Casa & Obra - Lembretes e alertas inteligentes
 
 on:
   schedule:
@@ -19,9 +19,12 @@ jobs:
     env:
       SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
     steps:
-      - name: Disparar verificação de despesas vencendo hoje
+      - name: Verificar vencimentos e alertas inteligentes
         shell: bash
         run: |
           set -euo pipefail
           TOKEN="$(node -e "const c=require('crypto');process.stdout.write(c.createHash('sha256').update(process.env.SUPABASE_DB_PASSWORD+'|casa-obra-reminder-v1').digest('hex'))")"
+
           curl --fail --silent --show-error             --max-time 20             -X POST "https://djxuthfkhxaacdmhebld.supabase.co/functions/v1/push-notify"             -H "Content-Type: application/json"             -H "x-reminder-token: $TOKEN"             -d '{"mode":"due"}'
+
+          curl --fail --silent --show-error             --max-time 20             -X POST "https://djxuthfkhxaacdmhebld.supabase.co/functions/v1/push-notify"             -H "Content-Type: application/json"             -H "x-reminder-token: $TOKEN"             -d '{"mode":"smart"}'
