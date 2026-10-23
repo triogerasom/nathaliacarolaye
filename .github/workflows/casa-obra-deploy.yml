@@ -43,24 +43,44 @@ jobs:
           const fs = require('fs');
           const password = process.env.SUPABASE_DB_PASSWORD;
           const n = BigInt('0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551');
-          const hash = crypto.createHash('sha256').update(password + '|casa-obra-vapid-v1').digest('hex');
+          const hash = crypto.createHash('sha256').update(password + '|casa-obra-vapid-v2').digest('hex');
           const d = (BigInt('0x' + hash) % (n - 1n)) + 1n;
           const priv = Buffer.from(d.toString(16).padStart(64, '0'), 'hex');
           const ecdh = crypto.createECDH('prime256v1');
           ecdh.setPrivateKey(priv);
           const pub = ecdh.getPublicKey(null, 'uncompressed');
           const b64url = b => b.toString('base64').replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_');
-          const cron = crypto.createHash('sha256').update(password + '|casa-obra-cron-v1').digest('hex');
-          fs.appendFileSync(process.env.GITHUB_ENV, 'VAPID_PRIVATE_KEY=' + b64url(priv) + '\n');
-          fs.appendFileSync(process.env.GITHUB_ENV, 'VAPID_PUBLIC_KEY=' + b64url(pub) + '\n');
+          const privKey = b64url(priv);
+          const pubKey = b64url(pub);
+          const cron = crypto.createHash('sha256').update(password + '|casa-obra-cron-v2').digest('hex');
+          process.stdout.write('::add-mask::' + privKey + '\n');
+          process.stdout.write('::add-mask::' + pubKey + '\n');
+          process.stdout.write('::add-mask::' + cron + '\n');
+          fs.appendFileSync(process.env.GITHUB_ENV, 'VAPID_PRIVATE_KEY=' + privKey + '\n');
+          fs.appendFileSync(process.env.GITHUB_ENV, 'VAPID_PUBLIC_KEY=' + pubKey + '\n');
           fs.appendFileSync(process.env.GITHUB_ENV, 'CRON_SECRET=' + cron + '\n');
           NODE
 
-      - name: Link Supabase project
-        run: supabase link --project-ref "$SUPABASE_PROJECT_ID"
-
-      - name: Apply database migrations
-        run: supabase db push
+      - name: Apply Casa & Obra database migration via Management API
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const sql = fs.readFileSync('supabase/migrations/20261021_v4_sync_push.sql','utf8');
+          const url = 'https://api.supabase.com/v1/projects/' + process.env.SUPABASE_PROJECT_ID + '/database/query';
+          (async()=>{
+            const res = await fetch(url,{
+              method:'POST',
+              headers:{
+                'Authorization':'Bearer ' + process.env.SUPABASE_ACCESS_TOKEN,
+                'Content-Type':'application/json'
+              },
+              body:JSON.stringify({query:sql})
+            });
+            const body = await res.text();
+            if(!res.ok){ console.error('Migration failed:',res.status,body); process.exit(1); }
+            console.log('Migration applied successfully.');
+          })().catch(e=>{console.error(e);process.exit(1)});
+          NODE
 
       - name: Configure Edge Function secrets
         run: |
@@ -73,3 +93,15 @@ jobs:
 
       - name: Deploy push notification function
         run: supabase functions deploy push-notify --project-ref "$SUPABASE_PROJECT_ID" --no-verify-jwt
+
+      - name: Smoke test Edge Function
+        run: |
+          node <<'NODE'
+          (async()=>{
+            const url='https://' + process.env.SUPABASE_PROJECT_ID + '.supabase.co/functions/v1/push-notify';
+            const res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode:'vapid-key'})});
+            const data=await res.json().catch(()=>({}));
+            if(!res.ok || !data.publicKey){console.error('Smoke test failed',res.status,data);process.exit(1)}
+            console.log('Edge Function is online.');
+          })().catch(e=>{console.error(e);process.exit(1)});
+          NODE
