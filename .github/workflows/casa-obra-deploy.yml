@@ -23,7 +23,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
       SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
 
     steps:
@@ -34,32 +33,6 @@ jobs:
         uses: supabase/setup-cli@v1
         with:
           version: latest
-
-      - name: Derive stable push secrets
-        shell: bash
-        run: |
-          node <<'NODE'
-          const crypto = require('crypto');
-          const fs = require('fs');
-          const password = process.env.SUPABASE_DB_PASSWORD;
-          const n = BigInt('0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551');
-          const hash = crypto.createHash('sha256').update(password + '|casa-obra-vapid-v2').digest('hex');
-          const d = (BigInt('0x' + hash) % (n - 1n)) + 1n;
-          const priv = Buffer.from(d.toString(16).padStart(64, '0'), 'hex');
-          const ecdh = crypto.createECDH('prime256v1');
-          ecdh.setPrivateKey(priv);
-          const pub = ecdh.getPublicKey(null, 'uncompressed');
-          const b64url = b => b.toString('base64').replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_');
-          const privKey = b64url(priv);
-          const pubKey = b64url(pub);
-          const cron = crypto.createHash('sha256').update(password + '|casa-obra-cron-v2').digest('hex');
-          process.stdout.write('::add-mask::' + privKey + '\n');
-          process.stdout.write('::add-mask::' + pubKey + '\n');
-          process.stdout.write('::add-mask::' + cron + '\n');
-          fs.appendFileSync(process.env.GITHUB_ENV, 'VAPID_PRIVATE_KEY=' + privKey + '\n');
-          fs.appendFileSync(process.env.GITHUB_ENV, 'VAPID_PUBLIC_KEY=' + pubKey + '\n');
-          fs.appendFileSync(process.env.GITHUB_ENV, 'CRON_SECRET=' + cron + '\n');
-          NODE
 
       - name: Apply Casa & Obra database migration via Management API
         run: |
@@ -81,15 +54,6 @@ jobs:
             console.log('Migration applied successfully.');
           })().catch(e=>{console.error(e);process.exit(1)});
           NODE
-
-      - name: Configure Edge Function secrets
-        run: |
-          supabase secrets set \
-            VAPID_PUBLIC_KEY="$VAPID_PUBLIC_KEY" \
-            VAPID_PRIVATE_KEY="$VAPID_PRIVATE_KEY" \
-            CRON_SECRET="$CRON_SECRET" \
-            APP_URL="https://nathaliacarolaye.vercel.app" \
-            --project-ref "$SUPABASE_PROJECT_ID"
 
       - name: Deploy push notification function
         run: supabase functions deploy push-notify --project-ref "$SUPABASE_PROJECT_ID" --no-verify-jwt
