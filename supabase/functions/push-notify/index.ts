@@ -150,6 +150,10 @@ Deno.serve(async req => {
   }
 
   if(body.mode==="due"){
+    const {data:cfg,error:cfgErr}=await admin.from("backend_runtime_config").select("config_value").eq("name","reminder_token").maybeSingle();
+    if(cfgErr) throw cfgErr;
+    const supplied=req.headers.get("x-reminder-token")||"";
+    if(!cfg?.config_value || supplied!==cfg.config_value) return json({error:"forbidden"},403);
     const {date,time}=spNow();
     const slots=["08:20","09:50","11:20","12:50","14:20","15:50","17:20","18:50","20:20","21:50","23:20"];
     const nowMin=Number(time.slice(0,2))*60+Number(time.slice(3,5));
