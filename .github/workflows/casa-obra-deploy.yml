@@ -24,6 +24,7 @@ jobs:
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
 
     steps:
       - name: Checkout Casa & Obra branch
@@ -52,6 +53,33 @@ jobs:
             const body = await res.text();
             if(!res.ok){ console.error('Migration failed:',res.status,body); process.exit(1); }
             console.log('Migration applied successfully.');
+          })().catch(e=>{console.error(e);process.exit(1)});
+          NODE
+
+      - name: Store stable Web Push keypair in private database config
+        run: |
+          node <<'NODE'
+          const crypto = require('crypto');
+          const password = process.env.SUPABASE_DB_PASSWORD;
+          const n = BigInt('0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551');
+          const hash = crypto.createHash('sha256').update(password + '|casa-obra-vapid-v5').digest('hex');
+          const d = (BigInt('0x' + hash) % (n - 1n)) + 1n;
+          const priv = Buffer.from(d.toString(16).padStart(64,'0'),'hex');
+          const ecdh = crypto.createECDH('prime256v1');
+          ecdh.setPrivateKey(priv);
+          const pub = ecdh.getPublicKey(null,'uncompressed');
+          const enc = b => b.toString('base64').replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_');
+          const publicKey = enc(pub), privateKey = enc(priv);
+          const esc = s => s.replace(/'/g,"''");
+          const query = `insert into public.backend_runtime_config(name,config_value,updated_at) values
+            ('vapid_public','${esc(publicKey)}',now()),
+            ('vapid_private','${esc(privateKey)}',now())
+            on conflict (name) do update set config_value=excluded.config_value, updated_at=now();`;
+          const url='https://api.supabase.com/v1/projects/'+process.env.SUPABASE_PROJECT_ID+'/database/query';
+          (async()=>{
+            const res=await fetch(url,{method:'POST',headers:{Authorization:'Bearer '+process.env.SUPABASE_ACCESS_TOKEN,'Content-Type':'application/json'},body:JSON.stringify({query})});
+            if(!res.ok){console.error('Web Push config failed:',res.status,await res.text());process.exit(1)}
+            console.log('Web Push backend key configured.');
           })().catch(e=>{console.error(e);process.exit(1)});
           NODE
 
