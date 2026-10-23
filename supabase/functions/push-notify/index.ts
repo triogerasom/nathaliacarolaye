@@ -1,28 +1,42 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { ApplicationServer, importVapidKeys, exportApplicationServerKey, PushMessageError, Urgency } from "jsr:@negrel/webpush@0.5.0";
-import { createHash, createECDH } from "node:crypto";
-import { Buffer } from "node:buffer";
+import { ApplicationServer, importVapidKeys, PushMessageError, Urgency } from "jsr:@negrel/webpush@0.5.0";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const APP_URL = "https://nathaliacarolaye.vercel.app";
 const VAPID_SUBJECT = "mailto:administrativo@triogerasom.com.br";
-const seed = SERVICE_ROLE || Deno.env.get("SUPABASE_SECRET_KEYS") || "casa-obra";
-const curveN = BigInt("0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551");
-const digest = createHash("sha256").update(seed + "|casa-obra-vapid-v4").digest("hex");
-const scalar = (BigInt("0x" + digest) % (curveN - 1n)) + 1n;
-const privateBytes = Buffer.from(scalar.toString(16).padStart(64,"0"),"hex");
-const ecdh = createECDH("prime256v1");
-ecdh.setPrivateKey(privateBytes);
-const rawPublic = ecdh.getPublicKey(null,"uncompressed");
-const b64url = (b:Uint8Array) => Buffer.from(b).toString("base64").replace(/=/g,"").replace(/\+/g,"-").replace(/\//g,"_");
-const x=b64url(rawPublic.subarray(1,33)), y=b64url(rawPublic.subarray(33,65)), d=b64url(privateBytes);
-const vapidKeys = await importVapidKeys({
-  publicKey:{kty:"EC",crv:"P-256",alg:"ES256",x,y,ext:true,key_ops:["verify"]},
-  privateKey:{kty:"EC",crv:"P-256",alg:"ES256",x,y,d,ext:true,key_ops:["sign"]}
-});
-const VAPID_PUBLIC_KEY = await exportApplicationServerKey(vapidKeys);
-const appServer = await ApplicationServer.new({contactInformation:VAPID_SUBJECT,vapidKeys});
+const allowed = new Set(["juniotaylon0401@gmail.com", "eu15933220620@gmail.com"]);
+const admin = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false } });
+
+function b64urlToBytes(value:string){
+  const pad="=".repeat((4-value.length%4)%4);
+  const raw=atob((value+pad).replace(/-/g,"+").replace(/_/g,"/"));
+  return Uint8Array.from(raw, ch=>ch.charCodeAt(0));
+}
+function bytesToB64url(bytes:Uint8Array){
+  let raw=""; for(const b of bytes) raw+=String.fromCharCode(b);
+  return btoa(raw).replace(/=/g,"").replace(/\+/g,"-").replace(/\//g,"_");
+}
+let pushRuntimePromise:Promise<{publicKey:string,appServer:ApplicationServer}>|null=null;
+async function getPushRuntime(){
+  if(!pushRuntimePromise) pushRuntimePromise=(async()=>{
+    const {data,error}=await admin.from("backend_runtime_config").select("name,config_value").in("name",["vapid_public","vapid_private"]);
+    if(error) throw error;
+    const map=Object.fromEntries((data||[]).map((r:any)=>[r.name,r.config_value]));
+    const publicKey=String(map.vapid_public||""), privateKey=String(map.vapid_private||"");
+    if(!publicKey||!privateKey) throw new Error("Web Push backend key is not configured.");
+    const pub=b64urlToBytes(publicKey), priv=b64urlToBytes(privateKey);
+    if(pub.length!==65||priv.length!==32) throw new Error("Invalid Web Push key length.");
+    const x=bytesToB64url(pub.slice(1,33)), y=bytesToB64url(pub.slice(33,65)), d=bytesToB64url(priv);
+    const vapidKeys=await importVapidKeys({
+      publicKey:{kty:"EC",crv:"P-256",alg:"ES256",x,y,ext:true,key_ops:["verify"]},
+      privateKey:{kty:"EC",crv:"P-256",alg:"ES256",x,y,d,ext:true,key_ops:["sign"]}
+    },{extractable:false});
+    const appServer=await ApplicationServer.new({contactInformation:VAPID_SUBJECT,vapidKeys});
+    return {publicKey,appServer};
+  })();
+  return pushRuntimePromise;
+}
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -81,6 +95,7 @@ function dueExpenses(state:any,date:string){
   return out.filter(x=>!state.pd?.[x._payKey]);
 }
 async function sendAll(payload:any){
+  const {appServer}=await getPushRuntime();
   const { data: subs, error } = await admin.from("push_subscriptions").select("id,endpoint,p256dh,auth");
   if (error) throw error;
   let sent=0;
@@ -115,7 +130,7 @@ Deno.serve(async req => {
   let body:any={};
   try{body=await req.json()}catch{}
 
-  if(body.mode==="vapid-key"){ return json({publicKey:VAPID_PUBLIC_KEY}); }
+  if(body.mode==="vapid-key"){ const {publicKey}=await getPushRuntime(); return json({publicKey}); }
 
   if(body.mode==="broadcast"){
     const user=await authUser(req);
