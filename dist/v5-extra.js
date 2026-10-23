@@ -8,6 +8,31 @@
   const xdocs=txId=>(S.v5?.documents||[]).filter(d=>String(d.txId)===String(txId)).sort((a,b)=>Number(b._u||0)-Number(a._u||0));
   const xqueue=()=>Number(localStorage.getItem('co_offline_queue')||0);
   const xsetqueue=v=>localStorage.setItem('co_offline_queue',String(Math.max(0,Number(v)||0)));
+  S.v5.notificationPrefs=Array.isArray(S.v5.notificationPrefs)?S.v5.notificationPrefs:[];
+  const oldEnsurePrefs=ensureStateShape;
+  ensureStateShape=function(x=S){const o=oldEnsurePrefs(x);o.v5.notificationPrefs=Array.isArray(o.v5.notificationPrefs)?o.v5.notificationPrefs:[];return o};
+  const oldMergePrefs=mergeState;
+  mergeState=function(a,b){
+    const o=oldMergePrefs(a,b);o.v5.notificationPrefs=Array.isArray(o.v5.notificationPrefs)?o.v5.notificationPrefs:[];
+    const m=new Map();
+    for(const p of [...(a?.v5?.notificationPrefs||[]),...(b?.v5?.notificationPrefs||[])]){const k=String(p.email||p.id||'').toLowerCase();if(!k)continue;const cur=m.get(k);if(!cur||Number(p._u||0)>=Number(cur._u||0))m.set(k,p)}
+    o.v5.notificationPrefs=[...m.values()];return o;
+  };
+  function myNotifyPref(){
+    const email=String(CLOUD_USER?.email||'').toLowerCase(),def={notifyNew:true,notifyDue:true,notifyThreeDays:true,notifyOneDay:true,notifyOverdue:true,notifyBudget:true,notifyLowCash:true,weeklySummary:true};
+    return {...def,...(S.v5.notificationPrefs.find(p=>String(p.email||'').toLowerCase()===email)||{}),email,id:email};
+  }
+  function appendUserNotifyPrefs(){
+    const main=document.querySelector('main');if(!main||document.getElementById('v51notifprefs'))return;
+    const p=myNotifyPref(),opts=[['notifyNew','Novos lançamentos e compromissos'],['notifyThreeDays','3 dias antes'],['notifyOneDay','1 dia antes'],['notifyDue','No vencimento / 90 min'],['notifyOverdue','Despesas atrasadas'],['notifyBudget','Orçamento ultrapassado'],['notifyLowCash','Risco de saldo negativo'],['weeklySummary','Resumo semanal']];
+    main.insertAdjacentHTML('beforeend',`<div class="card" id="v51notifprefs"><h2>Meus avisos</h2><div class="mu" style="font-size:12px;margin-bottom:8px">Preferências deste usuário: ${xesc(p.email||'conta atual')}</div>${opts.map(([k,l])=>`<label class="v5toggle"><span>${l}</span><input type="checkbox" data-v51notify="${k}" ${p[k]!==false?'checked':''}></label>`).join('')}<button class="ghost v5full" onclick="saveMyNotifyPrefs()">Salvar meus avisos</button></div>`);
+  }
+  window.saveMyNotifyPrefs=function(){
+    const email=String(CLOUD_USER?.email||'').toLowerCase();if(!email)return toast('Entre com sua conta para salvar.');
+    const p={id:email,email,_u:xnow()};for(const el of document.querySelectorAll('[data-v51notify]'))p[el.dataset.v51notify]=el.checked;
+    const i=S.v5.notificationPrefs.findIndex(x=>String(x.email||'').toLowerCase()===email);if(i>=0)S.v5.notificationPrefs[i]=p;else S.v5.notificationPrefs.push(p);
+    save();render();toast('Preferências deste usuário salvas.');
+  };
 
   function renderProjectsV51(){
     const list=(S.v5.projects||[]).map(p=>{
@@ -156,7 +181,7 @@
     oldRenderExtra();
     const main=document.querySelector('main');if(!main)return;
     if(tab==='mais'&&!document.getElementById('v51menu'))main.insertAdjacentHTML('afterbegin',`<div class="card" id="v51menu"><h2>Organização</h2><div class="tr" onclick="v5Go('projects')"><div class="ic">🗂️</div><div class="t"><b>Projetos e centros</b><span class="mu">Obra, pessoal, veículo e outros</span></div><span class="mu">›</span></div><div class="tr" onclick="v5Go('filters')"><div class="ic">⚙️</div><div class="t"><b>Filtros avançados</b><span class="mu">Tipo, status, projeto, categoria e período</span></div><span class="mu">›</span></div></div>`);
-    if(tab==='settings')appendHomeSettings();
+    if(tab==='settings'){appendHomeSettings();appendUserNotifyPrefs();}
     if(tab==='relv5')appendReportActions();
     if(tab==='home'){
       const q=xqueue();const hd=document.querySelector('.hd');if(q&&hd)hd.insertAdjacentHTML('beforeend',`<div class="v5sync">📴 ${q} alteração(ões) salva(s) offline e aguardando sincronização</div>`);
