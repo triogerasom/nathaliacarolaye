@@ -59,6 +59,26 @@ jobs:
           })().catch(e=>{console.error(e);process.exit(1)});
           NODE
 
+      - name: Validate Casa & Obra V5 schema
+        run: |
+          node <<'NODE'
+          const query = `select
+            (to_regclass('public.app_state_backups') is not null) as backups_ok,
+            exists(
+              select 1 from storage.buckets
+              where id='receipts' and public=false and file_size_limit=2097152
+            ) as receipts_ok;`;
+          const url='https://api.supabase.com/v1/projects/'+process.env.SUPABASE_PROJECT_ID+'/database/query';
+          (async()=>{
+            const res=await fetch(url,{method:'POST',headers:{Authorization:'Bearer '+process.env.SUPABASE_ACCESS_TOKEN,'Content-Type':'application/json'},body:JSON.stringify({query})});
+            const body=await res.text();
+            if(!res.ok){console.error('Schema validation query failed:',res.status,body);process.exit(1)}
+            const data=JSON.parse(body),row=Array.isArray(data)?data[0]:data;
+            if(!row?.backups_ok||!row?.receipts_ok){console.error('V5 schema incomplete:',data);process.exit(1)}
+            console.log('V5 schema validated: backups + private receipts bucket.');
+          })().catch(e=>{console.error(e);process.exit(1)});
+          NODE
+
       - name: Store stable Web Push keypair in private database config
         run: |
           node <<'NODE'
