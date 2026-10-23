@@ -25,3 +25,5 @@
 
 ## Interface
 - Dados de exemplo removidos.
+
+- Produção Vercel vinculada à branch `casa-obra-v4-sync`.
