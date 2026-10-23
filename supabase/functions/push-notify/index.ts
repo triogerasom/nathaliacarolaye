@@ -123,9 +123,9 @@ async function claimDispatch(key:string){
   if(error)throw error;
   return true;
 }
-async function dispatchOnce(key:string,payload:any){
+async function dispatchOnce(key:string,payload:any,userIds:Set<string>|null=null){
   if(!(await claimDispatch(key)))return 0;
-  return await sendAll(payload);
+  return await sendAll(payload,userIds);
 }
 function budgetAlerts(state:any,date:string){
   const alerts:any[]=[];
@@ -147,13 +147,36 @@ function lowCashProjection(state:any,date:string){
   }
   return {balance:bal,min,minDate,firstNegative};
 }
-async function sendAll(payload:any){
+let userDirectoryPromise:Promise<Map<string,string>>|null=null;
+async function userDirectory(){
+  if(!userDirectoryPromise)userDirectoryPromise=(async()=>{
+    const {data,error}=await admin.auth.admin.listUsers({page:1,perPage:100});
+    if(error)throw error;
+    const m=new Map<string,string>();
+    for(const u of data.users||[]){const email=(u.email||'').toLowerCase();if(email)m.set(email,u.id)}
+    return m;
+  })();
+  return userDirectoryPromise;
+}
+async function recipientIdsFor(state:any,prefKey:string){
+  try{
+    const dir=await userDirectory(),prefs=state.v5?.notificationPrefs||[],ids=new Set<string>();
+    for(const email of allowed){
+      const pref=prefs.find((p:any)=>String(p.email||'').toLowerCase()===email);
+      if(pref?.[prefKey]===false)continue;
+      const id=dir.get(email);if(id)ids.add(id);
+    }
+    return ids;
+  }catch(e){console.error('recipient preferences',e);return null;}
+}
+async function sendAll(payload:any,userIds:Set<string>|null=null){
   const {appServer}=await getPushRuntime();
-  const { data: subs, error } = await admin.from("push_subscriptions").select("id,endpoint,p256dh,auth");
+  const { data: subs, error } = await admin.from("push_subscriptions").select("id,user_id,endpoint,p256dh,auth");
   if (error) throw error;
   let sent=0;
   const seen=new Set<string>();
   for (const s of subs||[]) {
+    if(userIds && !userIds.has(String(s.user_id||''))) continue;
     if(seen.has(s.endpoint)) continue;
     seen.add(s.endpoint);
     try {
@@ -199,7 +222,9 @@ Deno.serve(async req => {
       tag:`activity-${Date.now()}`,
       renotify:true
     };
-    return json({ok:true,sent:await sendAll(payload)});
+    const {data:stateRow}=await admin.from("app_state").select("data").eq("id","casa-obra-shared").maybeSingle();
+    const ids=await recipientIdsFor(stateRow?.data||{},"notifyNew");
+    return json({ok:true,sent:await sendAll(payload,ids)});
   }
 
   if(body.mode==="smart"){
@@ -215,21 +240,21 @@ Deno.serve(async req => {
     if(morning){
       if(settings.notifyThreeDays!==false){
         const d3=addDate(date,3),list=pendingOn(state,d3,"out");
-        if(list.length){const total=list.reduce((t:number,x:any)=>t+Number(x.val||0),0);const sent=await dispatchOnce(`pre3:${date}`,{title:"Contas em 3 dias",body:`${list.length} despesa${list.length>1?"s":""} · ${money(total)} · vencem em 3 dias`,url:`${APP_URL}/?tab=agenda`,tag:`pre3-${date}`,renotify:false});results.push({kind:"pre3",sent,count:list.length,total});}
+        if(list.length){const total=list.reduce((t:number,x:any)=>t+Number(x.val||0),0);const sent=await dispatchOnce(`pre3:${date}`,{title:"Contas em 3 dias",body:`${list.length} despesa${list.length>1?"s":""} · ${money(total)} · vencem em 3 dias`,url:`${APP_URL}/?tab=agenda`,tag:`pre3-${date}`,renotify:false};results.push({kind:"pre3",sent,count:list.length,total});}
       }
       if(settings.notifyOneDay!==false){
         const d1=addDate(date,1),list=pendingOn(state,d1,"out");
-        if(list.length){const total=list.reduce((t:number,x:any)=>t+Number(x.val||0),0);const sent=await dispatchOnce(`pre1:${date}`,{title:"Contas vencem amanhã",body:`${list.length} despesa${list.length>1?"s":""} · ${money(total)}`,url:`${APP_URL}/?tab=agenda`,tag:`pre1-${date}`,renotify:false});results.push({kind:"pre1",sent,count:list.length,total});}
+        if(list.length){const total=list.reduce((t:number,x:any)=>t+Number(x.val||0),0);const sent=await dispatchOnce(`pre1:${date}`,{title:"Contas vencem amanhã",body:`${list.length} despesa${list.length>1?"s":""} · ${money(total)}`,url:`${APP_URL}/?tab=agenda`,tag:`pre1-${date}`,renotify:false},await recipientIdsFor(state,"notifyOneDay"));results.push({kind:"pre1",sent,count:list.length,total});}
       }
       const overdue=rangeEvents(state,addDate(date,-365),addDate(date,-1),370).filter((x:any)=>x.type==="out"&&!state.pd?.[x._payKey]);
-      if(overdue.length){const total=overdue.reduce((t:number,x:any)=>t+Number(x.val||0),0);const sent=await dispatchOnce(`overdue:${date}`,{title:"Despesas atrasadas",body:`${overdue.length} pendência${overdue.length>1?"s":""} · ${money(total)} em atraso`,url:`${APP_URL}/?tab=home`,tag:`overdue-${date}`,renotify:false});results.push({kind:"overdue",sent,count:overdue.length,total});}
+      if(overdue.length){const total=overdue.reduce((t:number,x:any)=>t+Number(x.val||0),0);const sent=await dispatchOnce(`overdue:${date}`,{title:"Despesas atrasadas",body:`${overdue.length} pendência${overdue.length>1?"s":""} · ${money(total)} em atraso`,url:`${APP_URL}/?tab=home`,tag:`overdue-${date}`,renotify:false},await recipientIdsFor(state,"notifyOverdue"));results.push({kind:"overdue",sent,count:overdue.length,total});}
       if(settings.notifyBudget!==false){
         const alerts=budgetAlerts(state,date);
-        if(alerts.length){const worst=alerts.sort((a,b)=>b.over-a.over)[0];const sent=await dispatchOnce(`budget:${date}`,{title:"Orçamento ultrapassado",body:`${worst.name}: ${money(worst.over)} acima do limite${alerts.length>1?` · +${alerts.length-1} orçamento(s)`:""}`,url:`${APP_URL}/?tab=budgets`,tag:`budget-${date}`,renotify:false});results.push({kind:"budget",sent,count:alerts.length});}
+        if(alerts.length){const worst=alerts.sort((a,b)=>b.over-a.over)[0];const sent=await dispatchOnce(`budget:${date}`,{title:"Orçamento ultrapassado",body:`${worst.name}: ${money(worst.over)} acima do limite${alerts.length>1?` · +${alerts.length-1} orçamento(s)`:""}`,url:`${APP_URL}/?tab=budgets`,tag:`budget-${date}`,renotify:false},await recipientIdsFor(state,"notifyBudget"));results.push({kind:"budget",sent,count:alerts.length});}
       }
       if(settings.notifyLowCash!==false){
         const p=lowCashProjection(state,date);
-        if(p.firstNegative){const sent=await dispatchOnce(`lowcash:${date}`,{title:"Alerta de saldo futuro",body:`O saldo projetado pode ficar negativo em ${p.firstNegative}. Menor previsão: ${money(p.min)}.`,url:`${APP_URL}/?tab=dashboard`,tag:`lowcash-${date}`,renotify:false});results.push({kind:"lowcash",sent,min:p.min,date:p.firstNegative});}
+        if(p.firstNegative){const sent=await dispatchOnce(`lowcash:${date}`,{title:"Alerta de saldo futuro",body:`O saldo projetado pode ficar negativo em ${p.firstNegative}. Menor previsão: ${money(p.min)}.`,url:`${APP_URL}/?tab=dashboard`,tag:`lowcash-${date}`,renotify:false},await recipientIdsFor(state,"notifyLowCash"));results.push({kind:"lowcash",sent,min:p.min,date:p.firstNegative});}
       }
     }
     const dow=new Date(date+"T12:00:00Z").getUTCDay();
@@ -238,7 +263,7 @@ Deno.serve(async req => {
       const spent=past.filter((x:any)=>x.type==="out").reduce((t:number,x:any)=>t+Number(x.val||0),0);
       const received=past.filter((x:any)=>x.type==="in").reduce((t:number,x:any)=>t+Number(x.val||0),0);
       const upcoming=next.reduce((t:number,x:any)=>t+Number(x.val||0),0);
-      const sent=await dispatchOnce(`weekly:${date}`,{title:"Resumo semanal · Casa & Obra",body:`Semana: ${money(received)} em receitas · ${money(spent)} em despesas. Próximos 7 dias: ${money(upcoming)} a pagar.`,url:`${APP_URL}/?tab=dashboard`,tag:`weekly-${date}`,renotify:false});
+      const sent=await dispatchOnce(`weekly:${date}`,{title:"Resumo semanal · Casa & Obra",body:`Semana: ${money(received)} em receitas · ${money(spent)} em despesas. Próximos 7 dias: ${money(upcoming)} a pagar.`,url:`${APP_URL}/?tab=dashboard`,tag:`weekly-${date}`,renotify:false},await recipientIdsFor(state,"weeklySummary"));
       results.push({kind:"weekly",sent,spent,received,upcoming});
     }
     return json({ok:true,date,time,results,skipped:results.length===0});
