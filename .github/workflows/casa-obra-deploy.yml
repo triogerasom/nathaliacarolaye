@@ -70,10 +70,12 @@ jobs:
           const pub = ecdh.getPublicKey(null,'uncompressed');
           const enc = b => b.toString('base64').replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_');
           const publicKey = enc(pub), privateKey = enc(priv);
+          const reminderToken = crypto.createHash('sha256').update(password + '|casa-obra-reminder-v1').digest('hex');
           const esc = s => s.replace(/'/g,"''");
           const query = `insert into public.backend_runtime_config(name,config_value,updated_at) values
             ('vapid_public','${esc(publicKey)}',now()),
-            ('vapid_private','${esc(privateKey)}',now())
+            ('vapid_private','${esc(privateKey)}',now()),
+            ('reminder_token','${esc(reminderToken)}',now())
             on conflict (name) do update set config_value=excluded.config_value, updated_at=now();`;
           const url='https://api.supabase.com/v1/projects/'+process.env.SUPABASE_PROJECT_ID+'/database/query';
           (async()=>{
