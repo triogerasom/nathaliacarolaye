@@ -202,6 +202,47 @@ Deno.serve(async req => {
     return json({ok:true,sent:await sendAll(payload)});
   }
 
+  if(body.mode==="smart"){
+    const {data:cfg,error:cfgErr}=await admin.from("backend_runtime_config").select("config_value").eq("name","reminder_token").maybeSingle();
+    if(cfgErr) throw cfgErr;
+    const supplied=req.headers.get("x-reminder-token")||"";
+    if(!cfg?.config_value || supplied!==cfg.config_value) return json({error:"forbidden"},403);
+    const {date,time}=spNow(),nowMin=Number(time.slice(0,2))*60+Number(time.slice(3,5));
+    const morning=nowMin>=500&&nowMin<515,weeklyWindow=nowMin>=1160&&nowMin<1175;
+    const {data:row,error}=await admin.from("app_state").select("data").eq("id","casa-obra-shared").maybeSingle();
+    if(error)throw error;
+    const state=row?.data||{},settings=state.v5?.settings||{},results:any[]=[];
+    if(morning){
+      if(settings.notifyThreeDays!==false){
+        const d3=addDate(date,3),list=pendingOn(state,d3,"out");
+        if(list.length){const total=list.reduce((t:number,x:any)=>t+Number(x.val||0),0);const sent=await dispatchOnce(`pre3:${date}`,{title:"Contas em 3 dias",body:`${list.length} despesa${list.length>1?"s":""} · ${money(total)} · vencem em 3 dias`,url:`${APP_URL}/?tab=agenda`,tag:`pre3-${date}`,renotify:false});results.push({kind:"pre3",sent,count:list.length,total});}
+      }
+      if(settings.notifyOneDay!==false){
+        const d1=addDate(date,1),list=pendingOn(state,d1,"out");
+        if(list.length){const total=list.reduce((t:number,x:any)=>t+Number(x.val||0),0);const sent=await dispatchOnce(`pre1:${date}`,{title:"Contas vencem amanhã",body:`${list.length} despesa${list.length>1?"s":""} · ${money(total)}`,url:`${APP_URL}/?tab=agenda`,tag:`pre1-${date}`,renotify:false});results.push({kind:"pre1",sent,count:list.length,total});}
+      }
+      const overdue=rangeEvents(state,addDate(date,-365),addDate(date,-1),370).filter((x:any)=>x.type==="out"&&!state.pd?.[x._payKey]);
+      if(overdue.length){const total=overdue.reduce((t:number,x:any)=>t+Number(x.val||0),0);const sent=await dispatchOnce(`overdue:${date}`,{title:"Despesas atrasadas",body:`${overdue.length} pendência${overdue.length>1?"s":""} · ${money(total)} em atraso`,url:`${APP_URL}/?tab=home`,tag:`overdue-${date}`,renotify:false});results.push({kind:"overdue",sent,count:overdue.length,total});}
+      if(settings.notifyBudget!==false){
+        const alerts=budgetAlerts(state,date);
+        if(alerts.length){const worst=alerts.sort((a,b)=>b.over-a.over)[0];const sent=await dispatchOnce(`budget:${date}`,{title:"Orçamento ultrapassado",body:`${worst.name}: ${money(worst.over)} acima do limite${alerts.length>1?` · +${alerts.length-1} orçamento(s)`:""}`,url:`${APP_URL}/?tab=budgets`,tag:`budget-${date}`,renotify:false});results.push({kind:"budget",sent,count:alerts.length});}
+      }
+      if(settings.notifyLowCash!==false){
+        const p=lowCashProjection(state,date);
+        if(p.firstNegative){const sent=await dispatchOnce(`lowcash:${date}`,{title:"Alerta de saldo futuro",body:`O saldo projetado pode ficar negativo em ${p.firstNegative}. Menor previsão: ${money(p.min)}.`,url:`${APP_URL}/?tab=dashboard`,tag:`lowcash-${date}`,renotify:false});results.push({kind:"lowcash",sent,min:p.min,date:p.firstNegative});}
+      }
+    }
+    const dow=new Date(date+"T12:00:00Z").getUTCDay();
+    if(dow===0&&weeklyWindow&&settings.weeklySummary!==false){
+      const past=rangeEvents(state,addDate(date,-6),date,7),next=rangeEvents(state,addDate(date,1),addDate(date,7),7).filter((x:any)=>x.type==="out"&&!state.pd?.[x._payKey]);
+      const spent=past.filter((x:any)=>x.type==="out").reduce((t:number,x:any)=>t+Number(x.val||0),0);
+      const received=past.filter((x:any)=>x.type==="in").reduce((t:number,x:any)=>t+Number(x.val||0),0);
+      const upcoming=next.reduce((t:number,x:any)=>t+Number(x.val||0),0);
+      const sent=await dispatchOnce(`weekly:${date}`,{title:"Resumo semanal · Casa & Obra",body:`Semana: ${money(received)} em receitas · ${money(spent)} em despesas. Próximos 7 dias: ${money(upcoming)} a pagar.`,url:`${APP_URL}/?tab=dashboard`,tag:`weekly-${date}`,renotify:false});
+      results.push({kind:"weekly",sent,spent,received,upcoming});
+    }
+    return json({ok:true,date,time,results,skipped:results.length===0});
+  }
   if(body.mode==="due"){
     const {data:cfg,error:cfgErr}=await admin.from("backend_runtime_config").select("config_value").eq("name","reminder_token").maybeSingle();
     if(cfgErr) throw cfgErr;
