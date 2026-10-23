@@ -190,6 +190,26 @@ async function sendAll(payload:any,userIds:Set<string>|null=null){
   }
   return sent;
 }
+async function purgeReceiptStorage(){
+  const bucket=admin.storage.from('receipts'),files:string[]=[];
+  const walk=async(prefix:string)=>{
+    let offset=0;
+    while(true){
+      const {data,error}=await bucket.list(prefix,{limit:100,offset,sortBy:{column:'name',order:'asc'}});
+      if(error)throw error;
+      const rows=data||[];
+      for(const item of rows){
+        const path=prefix?`${prefix}/${item.name}`:item.name;
+        if(item.id)files.push(path); else await walk(path);
+      }
+      if(rows.length<100)break;
+      offset+=rows.length;
+    }
+  };
+  await walk('');
+  for(let i=0;i<files.length;i+=100){const {error}=await bucket.remove(files.slice(i,i+100));if(error)throw error;}
+  return files.length;
+}
 async function authUser(req:Request){
   const h=req.headers.get("authorization")||"";
   const token=h.replace(/^Bearer\s+/i,"");
@@ -208,6 +228,22 @@ Deno.serve(async req => {
 
   if(body.mode==="vapid-key"){ const {publicKey}=await getPushRuntime(); return json({publicKey}); }
 
+  if(body.mode==="maintenance-reset"){
+    const supplied=req.headers.get("x-reminder-token")||"";
+    const {data:rows,error}=await admin.from("backend_runtime_config").select("name,config_value").in("name",["reminder_token","data_epoch","storage_reset_epoch"]);
+    if(error)throw error;
+    const cfg=Object.fromEntries((rows||[]).map((x:any)=>[x.name,x.config_value]));
+    if(!cfg.reminder_token || supplied!==cfg.reminder_token)return json({error:"forbidden"},403);
+    const epoch=String(body.epoch||"");
+    if(!epoch || epoch!==cfg.data_epoch)return json({error:"epoch_mismatch",epoch:cfg.data_epoch||null},409);
+    if(cfg.storage_reset_epoch===epoch)return json({ok:true,already:true,epoch});
+    const removed=await purgeReceiptStorage();
+    await admin.from("app_state_backups").delete().eq("state_id","casa-obra-shared");
+    await admin.from("notification_dispatch_log").delete().neq("dedupe_key","__never__");
+    const {error:cfgUp}=await admin.from("backend_runtime_config").upsert({name:"storage_reset_epoch",config_value:epoch,updated_at:new Date().toISOString()},{onConflict:"name"});
+    if(cfgUp)throw cfgUp;
+    return json({ok:true,epoch,removed});
+  }
   if(body.mode==="broadcast"){
     const user=await authUser(req);
     if(!user)return json({error:"unauthorized"},401);
@@ -240,7 +276,7 @@ Deno.serve(async req => {
     if(morning){
       if(settings.notifyThreeDays!==false){
         const d3=addDate(date,3),list=pendingOn(state,d3,"out");
-        if(list.length){const total=list.reduce((t:number,x:any)=>t+Number(x.val||0),0);const sent=await dispatchOnce(`pre3:${date}`,{title:"Contas em 3 dias",body:`${list.length} despesa${list.length>1?"s":""} · ${money(total)} · vencem em 3 dias`,url:`${APP_URL}/?tab=agenda`,tag:`pre3-${date}`,renotify:false};results.push({kind:"pre3",sent,count:list.length,total});}
+        if(list.length){const total=list.reduce((t:number,x:any)=>t+Number(x.val||0),0);const sent=await dispatchOnce(`pre3:${date}`,{title:"Contas em 3 dias",body:`${list.length} despesa${list.length>1?"s":""} · ${money(total)} · vencem em 3 dias`,url:`${APP_URL}/?tab=agenda`,tag:`pre3-${date}`,renotify:false},await recipientIdsFor(state,"notifyThreeDays"));results.push({kind:"pre3",sent,count:list.length,total});}
       }
       if(settings.notifyOneDay!==false){
         const d1=addDate(date,1),list=pendingOn(state,d1,"out");
@@ -297,7 +333,7 @@ Deno.serve(async req => {
       tag:`due-${date}-${slot}`,
       renotify:true
     };
-    return json({ok:true,sent:await sendAll(payload),count:due.length,total});
+    return json({ok:true,sent:await sendAll(payload,await recipientIdsFor(state,"notifyDue")),count:due.length,total});
   }
 
   return json({error:"invalid_mode"},400);
