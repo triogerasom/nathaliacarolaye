@@ -3,3 +3,20 @@
 @media(max-width:390px){.v5grid3{grid-template-columns:1fr}.v5grid2{grid-template-columns:1fr 1fr}}
 
 @media print{nav,.fab,.toast,.ghost,.pri,.x{display:none!important}.hd{position:static!important;background:#fff!important;color:#111!important}body,.app,main{background:#fff!important;color:#111!important;max-width:none!important}.card{break-inside:avoid;box-shadow:none!important;border:1px solid #ddd!important}.print-report main{padding:0!important}}
+
+/* Casa & Obra V6 — navegação segura para iPhone/PWA */
+.hd{position:relative}
+.v6back{
+  appearance:none;-webkit-appearance:none;border:0;
+  background:rgba(255,255,255,.16);color:inherit;
+  border-radius:999px;padding:7px 11px;
+  display:inline-flex;align-items:center;gap:4px;
+  font:inherit;font-weight:800;line-height:1;
+  margin:0 0 9px;min-height:34px;cursor:pointer;
+  -webkit-tap-highlight-color:transparent
+}
+.v6back>span{font-size:13px}
+.v6back:first-letter{font-size:24px;font-weight:500;line-height:12px}
+@supports(padding-top:env(safe-area-inset-top)){
+  .hd{padding-top:max(12px,env(safe-area-inset-top))}
+}
