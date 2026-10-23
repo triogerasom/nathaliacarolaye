@@ -111,6 +111,25 @@ jobs:
       - name: Deploy push notification function
         run: supabase functions deploy push-notify --project-ref "$SUPABASE_PROJECT_ID" --no-verify-jwt
 
+      - name: Purge pre-V6 receipt objects once
+        run: |
+          node <<'NODE'
+          const crypto=require('crypto');
+          const token=crypto.createHash('sha256').update(process.env.SUPABASE_DB_PASSWORD+'|casa-obra-reminder-v1').digest('hex');
+          const url='https://' + process.env.SUPABASE_PROJECT_ID + '.supabase.co/functions/v1/push-notify';
+          (async()=>{
+            const res=await fetch(url,{
+              method:'POST',
+              headers:{'Content-Type':'application/json','x-reminder-token':token},
+              body:JSON.stringify({mode:'maintenance-reset',epoch:'v6-reset-20261023-1'}),
+              signal:AbortSignal.timeout(30000)
+            });
+            const body=await res.text();
+            if(!res.ok){console.error('V6 storage reset failed:',res.status,body);process.exit(1)}
+            console.log('V6 storage reset:',body);
+          })().catch(e=>{console.error(e);process.exit(1)});
+          NODE
+
       - name: Smoke test Edge Function
         run: |
           node <<'NODE'
