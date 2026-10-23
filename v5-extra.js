@@ -164,7 +164,19 @@
   window.saveV51HomePrefs=function(){S.v5.settings.homeCards=[...document.querySelectorAll('[data-v51home]:checked')].map(x=>x.dataset.v51home);S.v5.settings._u=xnow();save();render();toast('Tela inicial atualizada.')};
 
   window.printV51Report=function(){document.body.classList.add('print-report');window.print();setTimeout(()=>document.body.classList.remove('print-report'),500)};
-  function appendReportActions(){const main=document.querySelector('main');if(!main||document.getElementById('v51reportactions'))return;main.insertAdjacentHTML('beforeend','<div id="v51reportactions" class="row" style="margin:12px 0"><button class="ghost" style="flex:1" onclick="printV51Report()">🖨️ Imprimir / Salvar PDF</button><button class="ghost" style="flex:1" onclick="backup()">💾 Backup JSON</button></div>')}
+  window.openBackupImportV51=function(){M(`<h2>Restaurar backup JSON</h2><div class="mu">O arquivo substituirá o estado financeiro atual depois da validação. Faça um backup antes se quiser preservar a versão atual.</div><input id="v51backupfile" type="file" accept="application/json,.json" style="margin-top:12px"><div id="er" class="out"></div><button class="pri" onclick="importBackupV51()">Validar e restaurar</button>${btns()}`)};
+  window.importBackupV51=async function(){
+    const file=document.getElementById('v51backupfile')?.files?.[0];if(!file)return document.getElementById('er').textContent='Escolha um arquivo JSON.';
+    try{
+      const raw=JSON.parse(await file.text()),candidate=raw?.fin||raw?.state||raw;
+      if(!candidate||!Array.isArray(candidate.tx)||!Array.isArray(candidate.acc))throw new Error('Formato de backup não reconhecido.');
+      const restored=ensureStateShape(structuredClone(candidate));
+      if(!confirm('Restaurar este backup e substituir os dados atuais?'))return;
+      S=restored;v5Shape?.(S);audit?.('Backup restaurado',file.name,'backup');save();closeM();render();toast('Backup restaurado e colocado na fila de sincronização.');
+      try{if(typeof cloudSyncNow==='function')await cloudSyncNow()}catch(e){}
+    }catch(e){document.getElementById('er').textContent=e?.message||'Não foi possível restaurar o backup.'}
+  };
+  function appendReportActions(){const main=document.querySelector('main');if(!main||document.getElementById('v51reportactions'))return;main.insertAdjacentHTML('beforeend','<div id="v51reportactions" class="row" style="margin:12px 0"><button class="ghost" style="flex:1" onclick="printV51Report()">🖨️ Imprimir / Salvar PDF</button><button class="ghost" style="flex:1" onclick="backup()">💾 Backup JSON</button><button class="ghost" style="flex:1" onclick="openBackupImportV51()">↩ Restaurar JSON</button></div>')}
 
   const oldSaveExtra=save;
   save=function(){if(!navigator.onLine)xsetqueue(xqueue()+1);oldSaveExtra()};
