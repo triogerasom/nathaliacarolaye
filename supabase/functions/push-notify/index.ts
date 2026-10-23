@@ -1,5 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
-import webpush from "npm:web-push@3.6.7";
+import { ApplicationServer, importVapidKeys, exportApplicationServerKey, PushMessageError, Urgency } from "jsr:@negrel/webpush@0.5.0";
 import { createHash, createECDH } from "node:crypto";
 import { Buffer } from "node:buffer";
 
@@ -9,18 +9,20 @@ const APP_URL = "https://nathaliacarolaye.vercel.app";
 const VAPID_SUBJECT = "mailto:administrativo@triogerasom.com.br";
 const seed = SERVICE_ROLE || Deno.env.get("SUPABASE_SECRET_KEYS") || "casa-obra";
 const curveN = BigInt("0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551");
-const digest = createHash("sha256").update(seed + "|casa-obra-vapid-v3").digest("hex");
+const digest = createHash("sha256").update(seed + "|casa-obra-vapid-v4").digest("hex");
 const scalar = (BigInt("0x" + digest) % (curveN - 1n)) + 1n;
 const privateBytes = Buffer.from(scalar.toString(16).padStart(64,"0"),"hex");
 const ecdh = createECDH("prime256v1");
 ecdh.setPrivateKey(privateBytes);
-const publicBytes = ecdh.getPublicKey(null,"uncompressed");
+const rawPublic = ecdh.getPublicKey(null,"uncompressed");
 const b64url = (b:Uint8Array) => Buffer.from(b).toString("base64").replace(/=/g,"").replace(/\+/g,"-").replace(/\//g,"_");
-const VAPID_PRIVATE_KEY = b64url(privateBytes);
-const VAPID_PUBLIC_KEY = b64url(publicBytes);
-const allowed = new Set(["juniotaylon0401@gmail.com", "eu15933220620@gmail.com"]);
-const admin = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false } });
-webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+const x=b64url(rawPublic.subarray(1,33)), y=b64url(rawPublic.subarray(33,65)), d=b64url(privateBytes);
+const vapidKeys = await importVapidKeys({
+  publicKey:{kty:"EC",crv:"P-256",x,y,ext:true,key_ops:["verify"]},
+  privateKey:{kty:"EC",crv:"P-256",x,y,d,ext:true,key_ops:["sign"]}
+});
+const VAPID_PUBLIC_KEY = await exportApplicationServerKey(vapidKeys);
+const appServer = await ApplicationServer.new({contactInformation:VAPID_SUBJECT,vapidKeys});
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -87,16 +89,12 @@ async function sendAll(payload:any){
     if(seen.has(s.endpoint)) continue;
     seen.add(s.endpoint);
     try {
-      await webpush.sendNotification(
-        {endpoint:s.endpoint,keys:{p256dh:s.p256dh,auth:s.auth}},
-        JSON.stringify(payload),
-        { TTL: 3600 }
-      );
+      const subscriber=appServer.subscribe({endpoint:s.endpoint,keys:{p256dh:s.p256dh,auth:s.auth}});
+      await subscriber.pushTextMessage(JSON.stringify(payload),{ttl:3600,urgency:Urgency.High,topic:"casa-obra"});
       sent++;
     } catch (e:any) {
-      const status=e?.statusCode||e?.status;
-      if(status===404||status===410) await admin.from("push_subscriptions").delete().eq("id",s.id);
-      else console.error("push",status,e?.message||e);
+      if(e instanceof PushMessageError && e.isGone()) await admin.from("push_subscriptions").delete().eq("id",s.id);
+      else console.error("push",e?.message||String(e));
     }
   }
   return sent;
