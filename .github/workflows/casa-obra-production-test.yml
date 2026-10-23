@@ -29,6 +29,17 @@ jobs:
           if grep -q "Dinheiro em mãos" /tmp/index.html; then echo "HOME_HAS_WALLET_FEATURE=YES"; else echo "HOME_HAS_WALLET_FEATURE=NO"; fi
           if grep -qi "Central Fiscal" /tmp/index.html; then echo "HOME_HAS_CENTRAL_FISCAL=YES"; else echo "HOME_HAS_CENTRAL_FISCAL=NO"; fi
           echo "HOME_BYTES=$(wc -c </tmp/index.html)"
+          if grep -q "v5.js.gz" /tmp/index.html; then echo "HOME_V5_JS=YES"; else echo "HOME_V5_JS=NO"; exit 1; fi
+          if grep -q "v5.css" /tmp/index.html; then echo "HOME_V5_CSS=YES"; else echo "HOME_V5_CSS=NO"; exit 1; fi
+
+          echo "=== V5 ASSETS ==="
+          V5CSS_CODE="$(curl -sS -L --max-time 20 -o /tmp/v5.css -w "%{http_code}" "$SITE/v5.css")"
+          echo "HTTP_V5_CSS=$V5CSS_CODE"
+          grep -q "Casa & Obra V5" /tmp/v5.css
+          curl -sS -L --compressed --max-time 20 "$SITE/v5.js.gz" -o /tmp/v5.js
+          grep -q "Casa & Obra V5" /tmp/v5.js
+          grep -q "Cartões e faturas" /tmp/v5.js
+          echo "V5_BUNDLE_OK=YES"
 
           echo "=== MANIFEST ==="
           MANIFEST_CODE="$(curl -sS -L --max-time 20 -o /tmp/manifest.webmanifest -w "%{http_code}" "$SITE/manifest.webmanifest")"
