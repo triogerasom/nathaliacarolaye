@@ -154,6 +154,32 @@
     return `<div class="hd sl"><b class="ttl">Filtros avançados</b><small>${rows.length} lançamento(s) · saldo ${xbrl(total)}</small></div><main><div class="card">${control('q','Buscar',`<input class="v5search" value="${xesc(f.q)}" placeholder="Descrição, categoria ou fornecedor">`)}${control('type','Tipo',`<select><option value="all">Todos</option><option value="out" ${f.type==='out'?'selected':''}>Despesas</option><option value="in" ${f.type==='in'?'selected':''}>Receitas</option></select>`)}${control('scope','Escopo',`<select><option value="all">Todos</option><option value="casa" ${f.scope==='casa'?'selected':''}>Casa</option><option value="obra" ${f.scope==='obra'?'selected':''}>Obra</option></select>`)}${control('status','Status',`<select><option value="all">Todos</option><option value="pending" ${f.status==='pending'?'selected':''}>Pendentes</option><option value="paid" ${f.status==='paid'?'selected':''}>Pagos/recebidos</option></select>`)}${control('project','Projeto',`<select><option value="">Todos</option>${projects.map(p=>`<option value="${p.id}" ${f.project===p.id?'selected':''}>${xesc(p.name)}</option>`).join('')}</select>`)}${control('cat','Categoria',`<select><option value="">Todas</option>${ALL.map(c=>`<option ${f.cat===c?'selected':''}>${xesc(c)}</option>`).join('')}</select>`)}${control('start','Data inicial',`<input type="date" value="${xesc(f.start)}">`)}${control('end','Data final',`<input type="date" value="${xesc(f.end)}">`)}</div>${rows.map(x=>`<div class="card"><div class="row sp"><div><b>${xesc(x.desc)}</b><div class="mu">${fdy(x.date)} · ${xesc(x.cat)}${xproj(x.projectId)?' · '+xesc(xproj(x.projectId).name):''}</div></div><b class="${x.type==='out'?'out':'in'}">${x.type==='out'?'−':'+'}${xbrl(x.val)}</b></div></div>`).join('')||'<div class="emp mu">Nenhum lançamento com esses filtros.</div>'}</main>`;
   }
   window.setV51Filter=function(k,v){window.v51Filter[k]=v;render()};
+  window.openInstallmentV51=function(){
+    const projects=S.v5.projects||[];
+    M(`<h2>Parcelar lançamento</h2>
+      <label>Tipo</label><select id="v51p_type"><option value="out">Despesa</option><option value="in">Receita</option></select>
+      <label>Escopo</label><select id="v51p_scope"><option value="casa">Casa</option><option value="obra">Obra</option></select>
+      ${mInput('Descrição','v51p_desc','')}
+      ${mInput('Valor total (R$)','v51p_total','','text','inputmode="decimal"')}
+      ${mInput('Número de parcelas','v51p_parts',2,'number','min="2" max="60"')}
+      ${mInput('Primeiro vencimento','v51p_date',TD,'date')}
+      <label>Categoria</label><select id="v51p_cat">${ALL.map(c=>`<option>${xesc(c)}</option>`).join('')}</select>
+      <label>Projeto / centro</label><select id="v51p_project"><option value="">Sem projeto</option>${projects.map(p=>`<option value="${p.id}">${xesc(p.name)}</option>`).join('')}</select>
+      <label>Conta / VR / dinheiro onde será debitado ou recebido</label>${walletSelect('v51p_wallet')}
+      <label>Fornecedor</label><select id="v51p_supplier"><option value="">Não informado</option>${S.v5.suppliers.map(s=>`<option value="${s.name}">${xesc(s.name)}</option>`).join('')}</select>
+      <div id="er" class="out"></div><button class="pri" onclick="saveInstallmentV51()">Criar parcelas</button>${btns()}`);
+  };
+  window.saveInstallmentV51=function(){
+    const type=$('#v51p_type').value,scope=$('#v51p_scope').value,desc=$('#v51p_desc').value.trim(),total=pv($('#v51p_total').value),parts=parseInt($('#v51p_parts').value)||0,date=$('#v51p_date').value,cat=$('#v51p_cat').value,projectId=$('#v51p_project').value,walletKey=$('#v51p_wallet').value,sup=$('#v51p_supplier').value;
+    if(!desc||!(total>0)||parts<2||parts>60||!date||!walletKey)return $('#er').textContent='Confira descrição, total, parcelas, data e carteira.';
+    const group=xid(),base=Math.floor(total*100/parts)/100,last=Math.round((total-base*(parts-1))*100)/100;
+    for(let i=0;i<parts;i++){
+      const d=new Date(date+'T12:00:00');d.setMonth(d.getMonth()+i);
+      S.tx.push(stamp({id:xid(),scope,type,desc:`${desc} · parcela ${i+1}/${parts}`,val:i===parts-1?last:base,cat,sup,date:ymd(d),walletKey,pay:'',pixKey:'',projectId,installmentGroup:group,installment:i+1,installments:parts,_u:xnow()}));
+    }
+    if(typeof audit==='function')audit('Lançamento parcelado criado',`${desc} · ${parts}x · ${xbrl(total)}`,'installment',group);
+    save();closeM();render();toast(`${parts} parcelas criadas.`);
+  };
 
   function appendHomeSettings(){
     const main=document.querySelector('main');if(!main||document.getElementById('v51homeprefs'))return;
@@ -192,7 +218,7 @@
     if(tab==='filters'){$('#app').innerHTML=renderFiltersV51();$('#nav').innerHTML='';return}
     oldRenderExtra();
     const main=document.querySelector('main');if(!main)return;
-    if(tab==='mais'&&!document.getElementById('v51menu'))main.insertAdjacentHTML('afterbegin',`<div class="card" id="v51menu"><h2>Organização</h2><div class="tr" onclick="v5Go('projects')"><div class="ic">🗂️</div><div class="t"><b>Projetos e centros</b><span class="mu">Obra, pessoal, veículo e outros</span></div><span class="mu">›</span></div><div class="tr" onclick="v5Go('filters')"><div class="ic">⚙️</div><div class="t"><b>Filtros avançados</b><span class="mu">Tipo, status, projeto, categoria e período</span></div><span class="mu">›</span></div></div>`);
+    if(tab==='mais'&&!document.getElementById('v51menu'))main.insertAdjacentHTML('afterbegin',`<div class="card" id="v51menu"><h2>Organização</h2><div class="tr" onclick="v5Go('projects')"><div class="ic">🗂️</div><div class="t"><b>Projetos e centros</b><span class="mu">Obra, pessoal, veículo e outros</span></div><span class="mu">›</span></div><div class="tr" onclick="v5Go('filters')"><div class="ic">⚙️</div><div class="t"><b>Filtros avançados</b><span class="mu">Tipo, status, projeto, categoria e período</span></div><span class="mu">›</span></div><div class="tr" onclick="openInstallmentV51()"><div class="ic">🧮</div><div class="t"><b>Parcelar lançamento</b><span class="mu">Cria parcelas mensais automaticamente</span></div><span class="mu">›</span></div></div>`);
     if(tab==='settings'){appendHomeSettings();appendUserNotifyPrefs();}
     if(tab==='relv5')appendReportActions();
     if(tab==='home'){
