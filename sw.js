@@ -1,4 +1,4 @@
-const VERSION='casa-obra-v5-1-final';
+const VERSION='casa-obra-v5-1-1';
 const CORE=['./','./index.html','./manifest.webmanifest','./offline.html','./supabase-config.js','./v5-0.js','./v5-1.js','./v5-2.js','./v5-3.js','./v5-4.js','./v5-extra.js','./v5.css','./icons/icon-192.png','./icons/icon-512.png','./icons/icon-maskable-512.png','./icons/apple-touch-icon.png','./icons/badge-96.png'];
 self.addEventListener('install',e=>e.waitUntil(caches.open(VERSION).then(c=>c.addAll(CORE)).then(()=>self.skipWaiting())));
 self.addEventListener('activate',e=>e.waitUntil(Promise.all([self.clients.claim(),caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==VERSION).map(k=>caches.delete(k))))])));

@@ -36,9 +36,18 @@
   };
 
   async function fileToDataUrlV51(file){
-    if(file.size>2*1024*1024)throw new Error(file.name+' excede 2 MB');
-    if(file.type.startsWith('image/'))return await compressImg(file);
-    if(file.type==='application/pdf')return await fileToDataURL(file);
+    if(file.type==='application/pdf'){
+      if(file.size>2*1024*1024)throw new Error(file.name+' excede 2 MB');
+      return await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=()=>reject(new Error('Falha ao ler '+file.name));r.readAsDataURL(file)});
+    }
+    if(file.type.startsWith('image/')){
+      if(file.size>8*1024*1024)throw new Error(file.name+' excede 8 MB');
+      return await new Promise((resolve,reject)=>{
+        const u=URL.createObjectURL(file),im=new Image();
+        im.onload=()=>{try{const k=Math.min(1,1200/Math.max(im.width,im.height)),cv=document.createElement('canvas');cv.width=Math.max(1,Math.round(im.width*k));cv.height=Math.max(1,Math.round(im.height*k));cv.getContext('2d').drawImage(im,0,0,cv.width,cv.height);const data=cv.toDataURL('image/jpeg',.72);URL.revokeObjectURL(u);if(dataUrlToBlob(data).size>2*1024*1024)reject(new Error(file.name+' ficou maior que 2 MB após compressão'));else resolve(data)}catch(e){URL.revokeObjectURL(u);reject(e)}};
+        im.onerror=()=>{URL.revokeObjectURL(u);reject(new Error('Falha ao ler '+file.name))};im.src=u;
+      });
+    }
     throw new Error('Tipo não suportado: '+file.name);
   }
   window.pickV51Docs=async function(input){
@@ -85,6 +94,21 @@
       for(const f of files)try{await uploadV51Doc(saved.id,f)}catch(e){console.warn(e);toast('Um documento não foi enviado.')}
       save();render();toast(files.length+' documento(s) salvo(s).');
     }
+  };
+
+  const oldRestoreTrashV51=window.restoreTrash;
+  window.restoreTrash=function(id){
+    const t=(S.v5?.trash||[]).find(x=>String(x.id)===String(id));
+    if(t?.type?.startsWith('v5:')){
+      const bucket=t.type.slice(3),obj=structuredClone(t.original||{});
+      if(Array.isArray(S.v5?.[bucket])){
+        obj._u=xnow();S.v5[bucket].push(obj);delete S.v5._deleted?.[bucket]?.[String(obj.id)];
+        S.v5._deleted.trash[String(id)]=xnow();S.v5.trash=S.v5.trash.filter(x=>String(x.id)!==String(id));
+        if(typeof audit==='function')audit('Item V5 restaurado',obj.name||obj.desc||bucket,'trash',obj.id||'');
+        save();render();toast('Item restaurado.');return;
+      }
+    }
+    return oldRestoreTrashV51?.(id);
   };
 
   window.v51Filter=window.v51Filter||{q:'',type:'all',scope:'all',status:'all',project:'',cat:'',start:'',end:''};
