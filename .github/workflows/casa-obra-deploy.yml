@@ -39,7 +39,10 @@ jobs:
         run: |
           node <<'NODE'
           const fs = require('fs');
-          const sql = fs.readFileSync('supabase/migrations/20261021_v4_sync_push.sql','utf8');
+          const dir = 'supabase/migrations';
+          const files = fs.readdirSync(dir).filter(x => x.endsWith('.sql')).sort();
+          const sql = files.map(name => '-- FILE: ' + name + '\n' + fs.readFileSync(dir + '/' + name, 'utf8')).join('\n\n');
+          console.log('Migrations:', files.join(', '));
           const url = 'https://api.supabase.com/v1/projects/' + process.env.SUPABASE_PROJECT_ID + '/database/query';
           (async()=>{
             const res = await fetch(url,{
@@ -52,7 +55,7 @@ jobs:
             });
             const body = await res.text();
             if(!res.ok){ console.error('Migration failed:',res.status,body); process.exit(1); }
-            console.log('Migration applied successfully.');
+            console.log('All migrations applied successfully.');
           })().catch(e=>{console.error(e);process.exit(1)});
           NODE
 
