@@ -483,10 +483,27 @@ function applyBackup(){const b=md.backup;if(!b?.fin)return;S=Object.assign({tx:[
 function showInternalOverlay(title,message,action){M(`<h2>${esc(title)}</h2><div style="line-height:1.5">${esc(message)}</div>${action?`<button class="pri" onclick="${action};closeM()">Abrir</button>`:''}${btns().replace('Cancelar','Fechar')}`)}
 $('#md').onclick=e=>{if(e.target.id==='md')closeM()};
 </script>
-<script src="./v5.js.gz"></script>
 <script>
-vrTick();
-bootstrapApp();
+(async()=>{
+  try{
+    const names=['v5-0.js','v5-1.js','v5-2.js','v5-3.js','v5-4.js'];
+    const parts=await Promise.all(names.map(async name=>{
+      const r=await fetch('./'+name,{cache:'no-store'});
+      if(!r.ok)throw new Error(name+' HTTP '+r.status);
+      return await r.text();
+    }));
+    const u=URL.createObjectURL(new Blob([parts.join('')],{type:'text/javascript'}));
+    await new Promise((resolve,reject)=>{
+      const s=document.createElement('script');
+      s.src=u;
+      s.onload=()=>{URL.revokeObjectURL(u);resolve()};
+      s.onerror=()=>{URL.revokeObjectURL(u);reject(new Error('Falha ao executar V5'))};
+      document.head.appendChild(s);
+    });
+  }catch(e){console.error('Casa & Obra V5:',e)}
+  vrTick();
+  bootstrapApp();
+})();
 </script>
 </body>
 </html>
