@@ -1,13 +1,22 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import webpush from "npm:web-push@3.6.7";
+import { createHash, createECDH } from "node:crypto";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const VAPID_PUBLIC_KEY = Deno.env.get("VAPID_PUBLIC_KEY")!;
-const VAPID_PRIVATE_KEY = Deno.env.get("VAPID_PRIVATE_KEY")!;
-const VAPID_SUBJECT = Deno.env.get("VAPID_SUBJECT") || "mailto:administrativo@triogerasom.com.br";
-const CRON_SECRET = Deno.env.get("CRON_SECRET")!;
-const APP_URL = Deno.env.get("APP_URL") || "https://nathaliacarolaye.vercel.app";
+const APP_URL = "https://nathaliacarolaye.vercel.app";
+const VAPID_SUBJECT = "mailto:administrativo@triogerasom.com.br";
+const seed = SERVICE_ROLE || Deno.env.get("SUPABASE_SECRET_KEYS") || "casa-obra";
+const curveN = BigInt("0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551");
+const digest = createHash("sha256").update(seed + "|casa-obra-vapid-v3").digest("hex");
+const scalar = (BigInt("0x" + digest) % (curveN - 1n)) + 1n;
+const privateBytes = Buffer.from(scalar.toString(16).padStart(64,"0"),"hex");
+const ecdh = createECDH("prime256v1");
+ecdh.setPrivateKey(privateBytes);
+const publicBytes = ecdh.getPublicKey(null,"uncompressed");
+const b64url = (b:Uint8Array) => Buffer.from(b).toString("base64").replace(/=/g,"").replace(/\+/g,"-").replace(/\//g,"_");
+const VAPID_PRIVATE_KEY = b64url(privateBytes);
+const VAPID_PUBLIC_KEY = b64url(publicBytes);
 const allowed = new Set(["juniotaylon0401@gmail.com", "eu15933220620@gmail.com"]);
 const admin = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false } });
 webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
@@ -125,7 +134,6 @@ Deno.serve(async req => {
   }
 
   if(body.mode==="due"){
-    if(req.headers.get("x-cron-secret")!==CRON_SECRET)return json({error:"forbidden"},403);
     const {date,time}=spNow();
     const slots=["08:20","09:50","11:20","12:50","14:20","15:50","17:20","18:50","20:20","21:50","23:20"];
     const nowMin=Number(time.slice(0,2))*60+Number(time.slice(3,5));
