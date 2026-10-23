@@ -1,0 +1,43 @@
+name: Casa & Obra - Retry Vercel V6
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  retry-vercel:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check if V6 is already live
+        id: live
+        shell: bash
+        run: |
+          set -euo pipefail
+          if curl -fsSL --max-time 20 https://nathaliacarolaye.vercel.app/ | grep -q "v6-0.js"; then
+            echo "live=yes" >> "$GITHUB_OUTPUT"
+            echo "Casa & Obra V6 is already live."
+          else
+            echo "live=no" >> "$GITHUB_OUTPUT"
+            echo "V6 is not live yet; a new Git push will ask Vercel to deploy."
+          fi
+
+      - name: Trigger a fresh Vercel Git deployment
+        if: steps.live.outputs.live != 'yes'
+        uses: actions/checkout@v4
+        with:
+          ref: casa-obra-v4-sync
+          fetch-depth: 0
+
+      - name: Push empty retry commit
+        if: steps.live.outputs.live != 'yes'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "casa-obra-deploy-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git commit --allow-empty -m "chore: retry Vercel deployment for Casa & Obra V6"
+          git push origin HEAD:casa-obra-v4-sync
