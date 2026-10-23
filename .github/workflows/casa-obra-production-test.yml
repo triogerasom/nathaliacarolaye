@@ -29,16 +29,24 @@ jobs:
           if grep -q "Dinheiro em mãos" /tmp/index.html; then echo "HOME_HAS_WALLET_FEATURE=YES"; else echo "HOME_HAS_WALLET_FEATURE=NO"; fi
           if grep -qi "Central Fiscal" /tmp/index.html; then echo "HOME_HAS_CENTRAL_FISCAL=YES"; else echo "HOME_HAS_CENTRAL_FISCAL=NO"; fi
           echo "HOME_BYTES=$(wc -c </tmp/index.html)"
-          if grep -q "v5.js.gz" /tmp/index.html; then echo "HOME_V5_JS=YES"; else echo "HOME_V5_JS=NO"; exit 1; fi
+          if grep -q "v5-0.js" /tmp/index.html; then echo "HOME_V5_LOADER=YES"; else echo "HOME_V5_LOADER=NO"; exit 1; fi
           if grep -q "v5.css" /tmp/index.html; then echo "HOME_V5_CSS=YES"; else echo "HOME_V5_CSS=NO"; exit 1; fi
 
           echo "=== V5 ASSETS ==="
           V5CSS_CODE="$(curl -sS -L --max-time 20 -o /tmp/v5.css -w "%{http_code}" "$SITE/v5.css")"
           echo "HTTP_V5_CSS=$V5CSS_CODE"
           grep -q "Casa & Obra V5" /tmp/v5.css
-          curl -sS -L --compressed --max-time 20 "$SITE/v5.js.gz" -o /tmp/v5.js
+          : > /tmp/v5.js
+          for n in 0 1 2 3 4; do
+            CODE="$(curl -sS -L --max-time 20 -o "/tmp/v5-$n.js" -w "%{http_code}" "$SITE/v5-$n.js")"
+            echo "HTTP_V5_PART_$n=$CODE"
+            test "$CODE" = "200"
+            cat "/tmp/v5-$n.js" >> /tmp/v5.js
+          done
+          node --check /tmp/v5.js
           grep -q "Casa & Obra V5" /tmp/v5.js
           grep -q "Cartões e faturas" /tmp/v5.js
+          grep -q "Assistente financeiro" /tmp/v5.js
           echo "V5_BUNDLE_OK=YES"
 
           echo "=== MANIFEST ==="
