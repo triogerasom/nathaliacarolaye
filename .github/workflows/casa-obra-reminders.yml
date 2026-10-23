@@ -1,0 +1,26 @@
+name: Casa & Obra - Lembretes de vencimento
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/casa-obra-reminders.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  check-due-expenses:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Disparar verificação de despesas vencendo hoje
+        run: |
+          curl --fail --silent --show-error \
+            --max-time 20 \
+            -X POST "https://djxuthfkhxaacdmhebld.supabase.co/functions/v1/push-notify" \
+            -H "Content-Type: application/json" \
+            -d '{"mode":"due"}'
