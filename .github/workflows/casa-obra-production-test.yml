@@ -82,6 +82,17 @@ jobs:
           grep -q "dataEpoch" /tmp/v6.js
           echo "V6_ACTIVE_OK=YES"
 
+          echo "=== CARD INVOICE FIX ==="
+          CARDFIX_CODE="$(curl -sS -L --max-time 20 -o /tmp/cardfix.js -w "%{http_code}" "$SITE/cardfix.js")"
+          echo "HTTP_CARDFIX=$CARDFIX_CODE"
+          test "$CARDFIX_CODE" = "200"
+          node --check /tmp/cardfix.js
+          grep -q "syncCardInvoices" /tmp/cardfix.js
+          grep -q "Conta bancária para débito da fatura" /tmp/cardfix.js
+          grep -q "dueForInstallment" /tmp/cardfix.js
+          grep -q "cardfix.js" /tmp/index.html
+          echo "CARDFIX_OK=YES"
+
           echo "=== MANIFEST ==="
           MANIFEST_CODE="$(curl -sS -L --max-time 20 -o /tmp/manifest.webmanifest -w "%{http_code}" "$SITE/manifest.webmanifest")"
           echo "HTTP_MANIFEST=$MANIFEST_CODE"
