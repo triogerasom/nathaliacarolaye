@@ -93,6 +93,17 @@ jobs:
           grep -q "cardfix.js" /tmp/index.html
           echo "CARDFIX_OK=YES"
 
+          echo "=== SIMPLIFIED UX ==="
+          UX_CODE="$(curl -sS -L --max-time 20 -o /tmp/ux.js -w "%{http_code}" "$SITE/ux.js")"
+          echo "HTTP_UX=$UX_CODE"
+          test "$UX_CODE" = "200"
+          node --check /tmp/ux.js
+          grep -q "interface simplificada" /tmp/ux.js
+          grep -q "Patrimônio e investimentos" /tmp/ux.js
+          grep -q "Tudo organizado por área" /tmp/ux.js
+          grep -q "ux.js" /tmp/index.html
+          echo "UX_OK=YES"
+
           echo "=== MANIFEST ==="
           MANIFEST_CODE="$(curl -sS -L --max-time 20 -o /tmp/manifest.webmanifest -w "%{http_code}" "$SITE/manifest.webmanifest")"
           echo "HTTP_MANIFEST=$MANIFEST_CODE"
