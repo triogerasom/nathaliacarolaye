@@ -19,12 +19,13 @@ jobs:
           set -euo pipefail
           HOME="$(curl -fsSL --max-time 20 https://nathaliacarolaye.vercel.app/ || true)"
           CARDFIX="$(curl -fsSL --max-time 20 https://nathaliacarolaye.vercel.app/cardfix.js || true)"
-          if printf '%s' "$HOME" | grep -q "v6-0.js" && printf '%s' "$CARDFIX" | grep -q "dueForInstallment"; then
+          UX="$(curl -fsSL --max-time 20 https://nathaliacarolaye.vercel.app/ux.js || true)"
+          if printf '%s' "$HOME" | grep -q "v6-0.js" && printf '%s' "$CARDFIX" | grep -q "dueForInstallment" && printf '%s' "$UX" | grep -q "interface simplificada"; then
             echo "live=yes" >> "$GITHUB_OUTPUT"
-            echo "Casa & Obra V6.1 billing fix is already live."
+            echo "Casa & Obra V6.2 simplified interface is already live."
           else
             echo "live=no" >> "$GITHUB_OUTPUT"
-            echo "Latest billing fix is not live yet; a new Git push will ask Vercel to deploy."
+            echo "Latest Casa & Obra interface is not live yet; a new Git push will ask Vercel to deploy."
           fi
 
       - name: Trigger a fresh Vercel Git deployment
