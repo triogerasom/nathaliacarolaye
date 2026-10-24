@@ -2,7 +2,7 @@
 (function(){
   const ROOT=new Set(['home','agenda','casa','obra','mais']);
   const PARENT={
-    dashboard:'home',
+    dashboard:'home',patrimonio:'mais',
     cards:'mais',budgets:'mais',suppliers:'mais',goals:'mais',shopping:'mais',
     quotes:'mais',search:'mais',activity:'mais',trash:'mais',closemonth:'mais',
     assistant:'mais',settings:'mais',projects:'mais',filters:'mais',
