@@ -17,12 +17,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if curl -fsSL --max-time 20 https://nathaliacarolaye.vercel.app/ | grep -q "v6-0.js"; then
+          HOME="$(curl -fsSL --max-time 20 https://nathaliacarolaye.vercel.app/ || true)"
+          CARDFIX="$(curl -fsSL --max-time 20 https://nathaliacarolaye.vercel.app/cardfix.js || true)"
+          if printf '%s' "$HOME" | grep -q "v6-0.js" && printf '%s' "$CARDFIX" | grep -q "dueForInstallment"; then
             echo "live=yes" >> "$GITHUB_OUTPUT"
-            echo "Casa & Obra V6 is already live."
+            echo "Casa & Obra V6.1 billing fix is already live."
           else
             echo "live=no" >> "$GITHUB_OUTPUT"
-            echo "V6 is not live yet; a new Git push will ask Vercel to deploy."
+            echo "Latest billing fix is not live yet; a new Git push will ask Vercel to deploy."
           fi
 
       - name: Trigger a fresh Vercel Git deployment
