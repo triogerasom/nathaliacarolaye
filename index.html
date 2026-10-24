@@ -104,6 +104,27 @@ linear-gradient(180deg,var(--bg),color-mix(in srgb,var(--bg) 88%,var(--b) 12%))}
 .cloud-pill.ok{background:#e8f7f1;color:#08724d}.cloud-pill.err{background:#fdecec;color:#b42626}
 
 </style>
+
+<style id="co-navfix-style">
+.co-modal-back,.co-page-back{
+  appearance:none;-webkit-appearance:none;border:0;
+  display:inline-flex;align-items:center;gap:5px;
+  min-height:38px;padding:7px 12px;border-radius:999px;
+  font:inherit;font-weight:800;line-height:1;
+  color:var(--tx,#111);background:var(--card,#fff);
+  box-shadow:0 4px 18px rgba(0,0,0,.12);
+  -webkit-tap-highlight-color:transparent;
+}
+.co-modal-back{margin:0 0 12px;position:sticky;top:0;z-index:20}
+.co-modal-back>span,.co-page-back>span{font-size:13px}
+.co-modal-back::first-letter,.co-page-back::first-letter{font-size:25px;font-weight:500}
+.co-page-back{
+  position:fixed;left:12px;
+  top:calc(env(safe-area-inset-top,0px) + 10px);
+  z-index:9998;
+}
+#md.show .co-page-back{display:none}
+</style>
 </head>
 <body>
 <div id="app"></div>
@@ -372,8 +393,19 @@ function dueCards(){
  h+=`<div class="card"><div class="row sp"><h2>Próximos 5 dias</h2><b class="out">${brl(sum(np))}</b></div>${days.map(d=>{const n=Math.round((new Date(d)-new Date(TD))/864e5);return `<div class="dh"><b>${n===1?'Amanhã':'Em '+n+' dias'}</b><span class="mu">${new Date(d+'T12:00:00').toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'2-digit'})}</span></div>`+nx.filter(e=>e.date===d).map(row).join('')}).join('')||'<div class="emp mu">Nenhum vencimento nos próximos 5 dias.</div>'}</div>`;
  return h}
 function go(t){tab=t;render();scrollTo(0,0)}
-const M=h=>{$('#sh').innerHTML=h;$('#md').classList.add('show')};
-function closeM(){$('#md').classList.remove('show')}
+let CO_MODAL_STACK=[];
+function coModalBack(){
+ const m=$('#md'),s=$('#sh');
+ if(CO_MODAL_STACK.length){s.innerHTML=CO_MODAL_STACK.pop();return}
+ if(m)m.classList.remove('show');
+}
+function M(h){
+ const m=$('#md'),s=$('#sh');if(!m||!s)return;
+ if(m.classList.contains('show')&&s.innerHTML)CO_MODAL_STACK.push(s.innerHTML);
+ s.innerHTML='<button class="co-modal-back" type="button" onclick="coModalBack()" aria-label="Voltar">&#8249; <span>Voltar</span></button>'+h;
+ m.classList.add('show');
+}
+function closeM(){CO_MODAL_STACK=[];$('#md').classList.remove('show')}
 const btns=()=>`<button class="ghost" style="width:100%;margin-top:8px" onclick="closeM()">Cancelar</button>`;
 function openBud(){M(`<h2>Orçamento da obra</h2><label>Valor total (R$)</label><input id="f1" inputmode="decimal" value="${S.budget||''}" placeholder="0,00"><div id="er" class="out"></div><button class="pri" onclick="saveBud()">Salvar orçamento</button>${btns()}`)}
 function saveBud(){const n=pv($('#f1').value);if(!(n>=0)){$('#er').textContent='Informe um valor válido.';return}S.budget=n;fieldStamp('budget');save();closeM();render()}
@@ -486,7 +518,7 @@ $('#md').onclick=e=>{if(e.target.id==='md')closeM()};
 <script>
 (async()=>{
   try{
-    const names=['v5-0.js','v5-1.js','v5-2.js','v5-3.js','v5-4.js','v5-extra.js','v6-0.js','v6-1.js','v6-2.js','v6-3.js','v6-4.js','v6-5.js'];
+    const names=['v5-0.js','v5-1.js','v5-2.js','v5-3.js','v5-4.js','v5-extra.js','v6-0.js','v6-1.js','v6-2.js','v6-3.js','v6-4.js','v6-5.js','navfix.js'];
     const parts=await Promise.all(names.map(async name=>{
       const r=await fetch('./'+name,{cache:'no-store'});
       if(!r.ok)throw new Error(name+' HTTP '+r.status);
