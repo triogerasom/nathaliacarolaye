@@ -19,8 +19,19 @@
   const accountOptions=(selected='')=>S.acc.map(a=>`<option value="acc:${a.id}" ${selected===`acc:${a.id}`?'selected':''}>🏦 ${escC(a.name)} · ${money(a.val)}</option>`).join('');
   const invoiceKey=(cardId,month)=>String(cardId)+'|'+String(month);
   const invoiceTxFor=(cardId,month)=>S.tx.find(x=>x.cardInvoiceKey===invoiceKey(cardId,month));
-  const invoiceMonthForFix=(card,date)=>{const d=new Date(date+'T12:00:00');if(d.getDate()>Number(card.closingDay||31))d.setMonth(d.getMonth()+1);return ymd(d).slice(0,7)};
-  const invoiceDueDateFix=(card,m)=>{const [y,mo]=m.split('-').map(Number),day=Math.min(Number(card.dueDay)||10,new Date(y,mo,0).getDate());return `${y}-${String(mo).padStart(2,'0')}-${String(day).padStart(2,'0')}`};
+  function dueForInstallment(card,purchaseDate,installment=1){
+    const d=new Date((purchaseDate||TD)+'T12:00:00');
+    d.setMonth(d.getMonth()+Math.max(0,Number(installment||1)-1));
+    const closingDay=Number(card.closingDay||31),dueDay=Number(card.dueDay||10);
+    if(d.getDate()>closingDay)d.setMonth(d.getMonth()+1);
+    if(dueDay<=closingDay)d.setMonth(d.getMonth()+1);
+    const y=d.getFullYear(),mo=d.getMonth()+1,day=Math.min(dueDay,new Date(y,mo,0).getDate());
+    return `${y}-${String(mo).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+  }
+  const invoiceDueDateFix=(card,m)=>{
+    const [y,mo]=m.split('-').map(Number),day=Math.min(Number(card.dueDay)||10,new Date(y,mo,0).getDate());
+    return `${y}-${String(mo).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+  };
   const isPaidTx=tx=>!!(tx&&S.pd?.[`${tx.id}|${tx.date}`]);
 
   function invoiceScope(charges){
@@ -36,6 +47,11 @@
     if(!S.v5?.cards||!S.v5?.cardCharges)return false;
     let changed=false;
     for(const card of S.v5.cards){
+      for(const ch of chargesFor(card.id,'',false)){
+        if(ch.paid)continue;
+        const due=dueForInstallment(card,ch.purchaseDate||TD,ch.installment||1),month=due.slice(0,7);
+        if(ch.dueDate!==due||ch.invoiceMonth!==month){ch.dueDate=due;ch.invoiceMonth=month;ch._u=Date.now();changed=true}
+      }
       const months=[...new Set(chargesFor(card.id,'',false).map(x=>x.invoiceMonth).filter(Boolean))];
       for(const month of months){
         const all=chargesFor(card.id,month,false),open=all.filter(x=>!x.paid),total=round2(open.reduce((t,x)=>t+amount(x),0));
@@ -142,8 +158,20 @@
     if(h)h.insertAdjacentHTML('afterend',`<div class="cardfix-account" style="margin:8px 0 12px">🏦 Esta compra entrará na fatura debitada de <b>${escC(accountName(c.accountKey))}</b>.</div>`);
   };
   window.saveCardPurchase=function(){
-    const c=cardById(md.cardId);if(!c?.accountKey){const er=document.getElementById('er');if(er)er.textContent='Defina a conta bancária da fatura antes de laçar compras.';return}
-    return oldSaveCardPurchaseFix();
+    const c=cardById(md.cardId),desc=$('#v51')?.value.trim(),total=pv($('#v52')?.value),date=$('#v53')?.value,parts=parseInt($('#v54')?.value)||1;
+    const er=document.getElementById('er');
+    if(!c?.accountKey){if(er)er.textContent='Defina a conta bancária da fatura antes de lançar compras.';return}
+    if(!c||!desc||!(total>0)||parts<1){if(er)er.textContent='Confira descrição, valor e parcelas.';return}
+    const scope=$('#v55')?.value||'casa',cat=$('#v56')?.value||'Outros',supplierId=$('#v57')?.value||'',purchaseId=uidC();
+    const base=Math.floor(total*100/parts)/100,last=round2(total-base*(parts-1));
+    for(let i=0;i<parts;i++){
+      const installment=i+1,dueDate=dueForInstallment(c,date,installment),invoiceMonth=dueDate.slice(0,7);
+      S.v5.cardCharges.push({
+        id:uidC(),cardId:c.id,purchaseId,desc,amount:installment===parts?last:base,purchaseDate:date,
+        installment,installments:parts,invoiceMonth,dueDate,scope,cat,supplierId,paid:false,_u:Date.now()
+      });
+    }
+    save();closeM();render();toast(parts>1?`${parts} parcelas criadas nas faturas corretas.`:'Compra adicionada à fatura.');
   };
 
   window.openInvoice=function(cardId,m){
