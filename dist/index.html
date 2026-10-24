@@ -518,7 +518,7 @@ $('#md').onclick=e=>{if(e.target.id==='md')closeM()};
 <script>
 (async()=>{
   try{
-    const names=['v5-0.js','v5-1.js','v5-2.js','v5-3.js','v5-4.js','v5-extra.js','v6-0.js','v6-1.js','v6-2.js','v6-3.js','v6-4.js','v6-5.js','navfix.js'];
+    const names=['v5-0.js','v5-1.js','v5-2.js','v5-3.js','v5-4.js','v5-extra.js','v6-0.js','v6-1.js','v6-2.js','v6-3.js','v6-4.js','v6-5.js','navfix.js','cardfix.js'];
     const parts=await Promise.all(names.map(async name=>{
       const r=await fetch('./'+name,{cache:'no-store'});
       if(!r.ok)throw new Error(name+' HTTP '+r.status);
