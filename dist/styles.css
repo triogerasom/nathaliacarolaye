@@ -124,6 +124,8 @@ input::placeholder { color:#858b95; }
 .proposal-table-input:hover,.proposal-table-input:focus { border-color:#bdc3cc; background:#fff; }
 .proposal-table-input.description { min-width:240px; }
 .proposal-table-input.number { text-align:right; font-variant-numeric:tabular-nums; }
+.quantity-source { display:block; margin:2px 8px 0; color:var(--muted); white-space:nowrap; }
+.quantity-source.fiemg { color:var(--success); font-weight:600; }
 .load-proposal-item { width:34px; height:34px; }
 .status-pill { width:fit-content; padding:3px 8px; border-radius:4px; font-size:12px; font-weight:600; white-space:nowrap; }
 .status-pill.ready { color:#16654a; background:#e5f3ed; }

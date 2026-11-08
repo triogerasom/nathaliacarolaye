@@ -88,7 +88,33 @@ fs.mkdirSync(output, { recursive: true });
   assert.equal(await page.locator('#menu-toggle').getAttribute('aria-expanded'), 'true');
   await page.locator('.nav-item[data-view="propostas"]').click();
   assert.equal(await page.locator('#menu-toggle').getAttribute('aria-expanded'), 'false');
-  await page.route('**/api/fiemg-import', (route) => route.fulfill({ json: { ok: true, processes: [{ externalProcessId: 16397, processNumber: 'SDE 2026004590', object: 'Aquisição de bebidas, biscoitos e bomboniere para a unidade Sesi Restaurante do Trabalhador em Ipatinga (SESI - IPATINGA). É obrigatório o envio de proposta comercial. Data limite para entrega dia 01/12/2026. Endereço de entrega: Avenida Pedro Linhares Gomes, 5431 - Bairro Horto, Ipatinga / MG - CEP: 35.160-290. FRETE CIF - Cond. Pag. 28 dias <img src=x onerror=alert(1)>', entity: 'SESI/DRMG - SEDE', modality: 'Processo de seleção sem disputa', deadline: '2026-11-10T20:00:00Z', portalStatus: 'Em andamento', itemCount: 56, sourceUrl: 'https://compras.fiemg.com.br/portal/Mural.aspx?nCdProcesso=16397&nCdModulo=59', items: [{ externalItemId: 5, description: 'Produto para conferência', quantity: 10, unit: 'UN', referenceUnitPrice: 5 }] }] } }));
+  const officialProposalItems = [
+    [4, '4 - AGUA SABORIZADA H2OH SABOR LIMAO PET - 500 ML', 48],
+    [5, '5 - COCA-COLA LATA 350 ML - UN', 300],
+    [6, '6 - COCA-COLA PET 2 LT - UN', 80],
+    [7, '7 - COCA-COLA ZERO ACUCAR LATA 220', 300],
+    [8, '8 - COCA-COLA ZERO ACUCAR LATA 350', 300],
+    [9, '9 - COCA-COLA ZERO PET 2 LT - UN', 20],
+    [14, '14 - FANTA LARANJA MINI - UN', 60],
+    [15, '15 - FANTA UVA LATA MINI - UN', 60],
+    [16, '16 - GUARANA ANTARCTICA LATA 350 ML', 120],
+    [17, '17 - GUARANA ANTARCTICA ZERO LAT 350ML', 60],
+    [18, '18 - GUARANA ANTARCTICA PET 2 LT -', 80],
+    [19, '19 - GUARANA KUAT MINI 220 ML - UN', 60],
+    [21, '21 - SPRITE LATA MINI 220 ML - UN', 60],
+    [22, '22 - SUCO LATA 290ML MANGA - UN', 12],
+    [24, '24 - SUCO LATA 290ML PESSEGO - UN', 12],
+    [25, '25 - SUCO LATA 290ML UVA - UN', 12],
+    [36, '36 - BOMBOM OURO BRANCO - UN', 100],
+    [45, '45 - DROPS HALLS CEREJA - UN', 21],
+    [46, '46 - DROPS HALLS EXTRA FORTE - UN', 21],
+    [47, '47 - DROPS HALLS MENTA - UN', 21],
+    [48, '48 - DROPS HALLS MORANGO - UN', 21],
+    [54, '54 - TRIDENT CANELA - UN', 21],
+    [55, '55 - TRIDENT MELANCIA - UN', 63],
+    [56, '56 - TRIDENT MENTA VERDE- UN', 63],
+  ].map(([order, description, quantity]) => ({ externalItemId: order, order, description, quantity, unit: 'UNIDADE', referenceUnitPrice: 0 }));
+  await page.route('**/api/fiemg-import', (route) => route.fulfill({ json: { ok: true, processes: [{ externalProcessId: 16397, processNumber: 'SDE 2026004590', object: 'Aquisição de bebidas, biscoitos e bomboniere para a unidade Sesi Restaurante do Trabalhador em Ipatinga (SESI - IPATINGA). É obrigatório o envio de proposta comercial. Data limite para entrega dia 01/12/2026. Endereço de entrega: Avenida Pedro Linhares Gomes, 5431 - Bairro Horto, Ipatinga / MG - CEP: 35.160-290. FRETE CIF - Cond. Pag. 28 dias <img src=x onerror=alert(1)>', entity: 'SESI/DRMG - SEDE', modality: 'Processo de seleção sem disputa', deadline: '2026-11-10T20:00:00Z', portalStatus: 'Em andamento', itemCount: 56, sourceUrl: 'https://compras.fiemg.com.br/portal/Mural.aspx?nCdProcesso=16397&nCdModulo=59', items: officialProposalItems }] } }));
   await page.fill('#proposal-process-url', 'https://compras.fiemg.com.br/portal/Mural.aspx?nCdProcesso=16397&nCdModulo=59');
   await page.locator('#proposal-fetch-process').click();
   await page.waitForFunction(() => !document.getElementById('proposal-fetch-process').disabled);
@@ -99,7 +125,16 @@ fs.mkdirSync(output, { recursive: true });
   assert.equal(fs.existsSync(csvPath), true, 'proposal CSV fixture must exist');
   await page.locator('#proposal-csv-input').setInputFiles(csvPath);
   assert.equal(await page.locator('#proposal-rows > tr').count(), 24);
-  assert.match(await page.locator('#proposal-total').innerText(), /7\.607,53/);
+  assert.match(await page.locator('#proposal-total').innerText(), /7\.419,99/);
+  assert.match(await page.locator('#proposal-item-count').innerText(), /24 quantidades conferidas na FIEMG/);
+  const proposalQuantities = await page.evaluate(() => Object.fromEntries(state.currentProposal.items.map((item) => [item.code, item.quantity])));
+  assert.equal(proposalQuantities['100062'], 80, 'Coca-Cola 2L must use the official FIEMG quantity');
+  assert.equal(proposalQuantities['100039'], 300, 'Coca-Cola Zero 350ml must use the official FIEMG quantity');
+  assert.equal(proposalQuantities['100064'], 20, 'Coca-Cola Zero 2L must use the official FIEMG quantity');
+  assert.equal(proposalQuantities['100545'], 100, 'Ouro Branco must use the official FIEMG quantity');
+  assert.equal(proposalQuantities['100538'], 21, 'Halls Cereja must use the official FIEMG quantity');
+  assert.equal(proposalQuantities['100541'], 63, 'Trident Melancia must use the official FIEMG quantity');
+  assert.equal(await page.locator('.quantity-source.fiemg').count(), 24, 'every imported quantity must show the FIEMG source');
   await page.setViewportSize({ width: 390, height: 844 });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'populated proposal must not overflow on mobile');
   assert.equal(await page.locator('#proposal-rows > tr').first().evaluate((element) => getComputedStyle(element).display), 'grid');
@@ -122,7 +157,7 @@ fs.mkdirSync(output, { recursive: true });
   assert.equal(await page.locator('#fiemg-rows .process-link').count(), 1);
   assert.match(await page.locator('#fiemg-rows .process-link').getAttribute('href'), /fiemg-detail\.html/);
   await page.locator('.fiemg-items summary').click();
-  assert.match(await page.locator('.fiemg-items').innerText(), /Produto para conferência/);
+  assert.match(await page.locator('.fiemg-items').innerText(), /COCA-COLA PET 2 LT/);
   await page.locator('#fiemg-sync-button').click();
   await page.waitForFunction(() => !fiemgImportBusy);
   assert.equal(await page.locator('#fiemg-rows > tr').count(), 1, 'Reimport must not duplicate');

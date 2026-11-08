@@ -41,7 +41,7 @@ const initialState = {
   proposals: [],
   currentProposal: {
     id: "", number: "", customer: "", processUrl: "", processId: "", processNumber: "", object: "",
-    modality: "", portalStatus: "", portalItemCount: 0, deadline: "", title: "Fornecimento de produtos - FIEMG / SESI",
+    modality: "", portalStatus: "", portalItemCount: 0, processItems: [], deadline: "", title: "Fornecimento de produtos - FIEMG / SESI",
     proposalType: "Proposta comercial", validityDays: 10, dirty: false, items: [],
   },
   fiemg: {
@@ -856,7 +856,10 @@ function renderProposal() {
     <tr>
       <td><input class="proposal-table-input proposal-item-input" data-index="${index}" data-field="code" value="${escapeHtml(item.code || "")}" aria-label="Código do item ${index + 1}" /></td>
       <td><input class="proposal-table-input description proposal-item-input" data-index="${index}" data-field="description" value="${escapeHtml(item.description || "")}" aria-label="Descrição do item ${index + 1}" /></td>
-      <td><input class="proposal-table-input number proposal-item-input" data-index="${index}" data-field="quantity" type="number" min="0" step="0.01" value="${Number(item.quantity || 0)}" aria-label="Quantidade do item ${index + 1}" /></td>
+      <td>
+        <input class="proposal-table-input number proposal-item-input" data-index="${index}" data-field="quantity" type="number" min="0" step="0.01" value="${Number(item.quantity || 0)}" aria-label="Quantidade do item ${index + 1}" />
+        <small class="quantity-source ${item.quantitySource === "fiemg" ? "fiemg" : ""}">${item.quantitySource === "fiemg" ? `Conferida na FIEMG · item ${escapeHtml(item.portalItemOrder || "-")}` : item.quantitySource === "manual" ? "Ajustada manualmente" : "Quantidade do CSV"}</small>
+      </td>
       <td><input class="proposal-table-input proposal-item-input" data-index="${index}" data-field="unit" value="${escapeHtml(item.unit || "UNIDADE")}" aria-label="Unidade do item ${index + 1}" /></td>
       <td><input class="proposal-table-input number proposal-item-input" data-index="${index}" data-field="unitPrice" type="number" min="0" step="0.01" value="${Number(item.unitPrice || 0).toFixed(2)}" aria-label="Valor unitário do item ${index + 1}" /></td>
       <td><strong>${money.format(Number(item.quantity || 0) * Number(item.unitPrice || 0))}</strong></td>
@@ -864,9 +867,13 @@ function renderProposal() {
     </tr>
   `);
   const total = proposalTotal();
+  const matchedQuantities = state.currentProposal.items.filter((item) => item.quantitySource === "fiemg").length;
+  const unmatchedQuantities = state.currentProposal.items.filter((item) => item.quantitySource !== "fiemg" && item.quantitySource !== "manual").length;
   document.getElementById("proposal-rows").innerHTML = rows.join("") || emptyRow(7, "Importe um CSV ou adicione itens manualmente.");
   document.getElementById("proposal-total").textContent = money.format(total);
-  document.getElementById("proposal-item-count").textContent = `${state.currentProposal.items.length} ${state.currentProposal.items.length === 1 ? "item" : "itens"} na proposta`;
+  document.getElementById("proposal-item-count").textContent = state.currentProposal.items.length
+    ? `${state.currentProposal.items.length} ${state.currentProposal.items.length === 1 ? "item" : "itens"} · ${matchedQuantities} ${matchedQuantities === 1 ? "quantidade conferida" : "quantidades conferidas"} na FIEMG${unmatchedQuantities ? ` · ${unmatchedQuantities} do CSV` : ""}`
+    : "Nenhum item na proposta";
   document.getElementById("proposal-number").textContent = state.currentProposal.number || "Nova proposta";
   document.getElementById("proposal-status").textContent = state.currentProposal.id ? (state.currentProposal.dirty ? "Alterada" : "Salva") : "Rascunho";
   document.getElementById("saved-proposal-rows").innerHTML = state.proposals.map((proposal, index) => `
@@ -1149,7 +1156,56 @@ function parseBrazilianNumber(value) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function parseProposalCsv(content) {
+function proposalDescriptionTokens(value) {
+  const ignored = new Set(["A", "O", "DE", "DA", "DO", "DAS", "DOS", "COM", "C", "REFRIGERANTE", "AGUA", "SABORIZADA", "SABOR", "LATA", "PET", "UN", "UNIDADE", "UNIDADES", "MINI", "PDV", "PACOTE", "ENVELOPE", "CHOCOLATE", "BOMBOM", "BALA", "DROPS", "CHICLETE", "NECTAR", "SUCO"]);
+  return String(value || "")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase()
+    .replace(/^\s*\d+\s*-\s*/, "")
+    .replace(/\bLAT\b/g, "LATA")
+    .replace(/\b(\d+)\s*LT\b/g, "$1L")
+    .replace(/\b(\d+)\s*(ML|GR|G)\b/g, "$1$2")
+    .replace(/\b(200|220|269|290|350|473|500)\b/g, "$1ML")
+    .replace(/[^A-Z0-9]+/g, " ").trim().split(/\s+/)
+    .filter((word) => word.length > 1 && !ignored.has(word));
+}
+
+function proposalItemMatch(csvItem, portalItem) {
+  const source = new Set(proposalDescriptionTokens(csvItem.description));
+  const target = new Set(proposalDescriptionTokens(portalItem.description));
+  if (!source.size || !target.size) return { score: 0, common: 0 };
+  const shared = [...source].filter((word) => target.has(word));
+  const common = shared.length;
+  const sourceCoverage = common / source.size;
+  const targetCoverage = common / target.size;
+  const dice = 2 * common / (source.size + target.size);
+  const sourceMeasures = [...source].filter((word) => /\d+(?:ML|L|G|KG)$/.test(word));
+  const measureBonus = sourceMeasures.some((word) => target.has(word)) ? 0.1 : 0;
+  return { score: Math.min(1, dice * 0.45 + sourceCoverage * 0.25 + targetCoverage * 0.3 + measureBonus), common };
+}
+
+function reconcileProposalItems(items, processItems = []) {
+  if (!processItems.length) return items.map((item) => ({ ...item, quantitySource: item.quantitySource || "csv" }));
+  return items.map((item) => {
+    if (item.quantitySource === "manual") return item;
+    const ranked = processItems.map((portalItem) => ({ portalItem, ...proposalItemMatch(item, portalItem) })).sort((a, b) => b.score - a.score);
+    const best = ranked[0];
+    const second = ranked[1];
+    const confident = best && best.common >= 2 && best.score >= 0.65 && (!second || best.score >= 0.995 || best.score - second.score >= 0.06);
+    if (!confident) return { ...item, quantitySource: "csv", quantityMatchScore: best?.score || 0 };
+    return {
+      ...item,
+      quantityCsv: Number(item.quantityCsv ?? item.quantity ?? 0),
+      quantity: Number(best.portalItem.quantity || item.quantity || 0),
+      unit: best.portalItem.unit || item.unit || "UNIDADE",
+      quantitySource: "fiemg",
+      quantityMatchScore: best.score,
+      portalItemOrder: best.portalItem.order,
+      portalItemDescription: best.portalItem.description,
+    };
+  });
+}
+
+function parseProposalCsv(content, processItems = state.currentProposal.processItems || []) {
   const rows = parseCsvTable(content);
   if (rows.length < 2) throw new Error("O CSV não contém itens para importar.");
   const headers = rows[0].map(normalizedCsvHeader);
@@ -1168,7 +1224,7 @@ function parseProposalCsv(content) {
   })).filter((item) => item.description && item.quantity > 0);
   if (!items.length) throw new Error("Nenhum item válido foi encontrado no CSV.");
   if (items.some((item) => item.unitPrice < 0)) throw new Error("O CSV contém preço negativo.");
-  return items;
+  return reconcileProposalItems(items, processItems);
 }
 
 function extractFiemgProcessCode(value) {
@@ -1215,10 +1271,12 @@ async function fetchProposalProcess() {
       modality: process.modality || "",
       portalStatus: process.portalStatus || "",
       portalItemCount: Number(process.itemCount || process.items?.length || 0),
+      processItems: process.items || [],
       deadline: isoDate(process.deadline),
       title: proposalTitleFromProcess(process),
       dirty: true,
     });
+    state.currentProposal.items = reconcileProposalItems(state.currentProposal.items || [], state.currentProposal.processItems);
     upsertFiemgProcess(process);
     saveState();
     renderProposal();
@@ -1360,7 +1418,7 @@ async function downloadProposal() {
     doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); doc.setTextColor(...muted);
     const conditions = [
       "Preços expressos em reais (R$).",
-      "Quantidades e preços conforme o arquivo CSV importado para esta proposta.",
+      "Quantidades conferidas no processo FIEMG e preços conforme o arquivo CSV importado.",
       "Custos indiretos, frete e armazenagem considerados na formação dos preços.",
       `Validade desta proposta: ${proposal.validityDays || 10} dias a partir da data de emissão.`,
       "Fornecimento sujeito às condições e aos prazos definidos no processo de contratação.",
@@ -1409,6 +1467,7 @@ document.addEventListener("change", (event) => {
     if (item) {
       const field = event.target.dataset.field;
       item[field] = ["quantity", "unitPrice"].includes(field) ? Math.max(0, Number(event.target.value || 0)) : event.target.value.trim();
+      if (field === "quantity") item.quantitySource = "manual";
       state.currentProposal.dirty = true;
       saveState();
       renderProposal();
