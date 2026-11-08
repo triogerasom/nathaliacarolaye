@@ -215,28 +215,68 @@
         </section>
 
         <section class="view" id="propostas">
+          <section class="overview-heading">
+            <div>
+              <h2>Proposta comercial</h2>
+              <p>Importe os itens, consulte o processo FIEMG e gere o documento em PDF.</p>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="section-heading">
+              <span>1. Processo de contratação</span>
+              <h2>Dados obtidos do portal FIEMG</h2>
+            </div>
+            <form class="proposal-form proposal-meta-form" id="proposal-meta-form">
+              <label class="wide-field">Link do processo FIEMG
+                <span class="field-action"><input id="proposal-process-url" type="url" placeholder="https://compras.fiemg.com.br/portal/Mural.aspx?nCdProcesso=..." /><button class="secondary" id="proposal-fetch-process" type="button"><i data-lucide="cloud-download"></i>Buscar processo</button></span>
+              </label>
+              <label>Cliente / entidade <input id="proposal-customer" placeholder="FIEMG, SESI ou SENAI" /></label>
+              <label>Número do processo <input id="proposal-process-number" placeholder="SDE 2026..." /></label>
+              <label class="wide-field">Objeto da contratação <textarea id="proposal-object" rows="4" placeholder="Objeto publicado no processo"></textarea></label>
+              <label>Título da proposta <input id="proposal-title" placeholder="Fornecimento de produtos" /></label>
+              <label>Tipo de proposta
+                <select id="proposal-type"><option value="Proposta comercial">Proposta comercial</option><option value="Proposta comercial parcial">Proposta comercial parcial</option></select>
+              </label>
+              <label>Validade em dias <input id="proposal-validity-days" type="number" min="1" max="365" step="1" value="10" /></label>
+              <label>Prazo do processo <input id="proposal-deadline" type="date" /></label>
+            </form>
+            <div class="process-result" id="proposal-process-result" aria-live="polite"></div>
+          </section>
+
           <section class="panel proposal-layout">
             <div>
               <div class="section-heading">
-                <span>Comercial</span>
-                <h2>Criar proposta comercial</h2>
+                <span>2. Itens e preços</span>
+                <h2>Importar planilha CSV</h2>
               </div>
-              <form class="proposal-form" id="proposal-form">
-                <label>Cliente <input id="proposal-customer" placeholder="Nome do cliente" required /></label>
-                <label>Validade da proposta <input id="proposal-validity" type="date" /></label>
-                <label>EAN/GTIN ou código <input id="proposal-code" placeholder="789..." /></label>
-                <label>Descrição do item <input id="proposal-desc" placeholder="Produto ou serviço" required /></label>
-                <label>Quantidade <input id="proposal-qty" type="number" min="0.01" step="0.01" value="1" required /></label>
-                <label>Valor unitário <input id="proposal-price" type="number" min="0" step="0.01" value="0" required /></label>
-                <button class="primary" type="submit">Adicionar item</button>
-              </form>
-              <p class="muted-copy">Itens de proposta não entram no cadastro de produtos nem alteram estoque. Use o EAN para buscar dados existentes ou preencha manualmente.</p>
+              <div class="proposal-csv-import">
+                <div class="upload-icon"><i data-lucide="file-spreadsheet"></i></div>
+                <div><strong>Arquivo de itens da proposta</strong><p>Colunas: código, produto, preço de venda, quantidade e unidade.</p><small id="proposal-csv-name">Nenhum arquivo selecionado</small></div>
+                <input id="proposal-csv-input" type="file" accept=".csv,text/csv" hidden />
+                <button class="secondary" id="proposal-choose-csv" type="button"><i data-lucide="upload"></i>Selecionar CSV</button>
+              </div>
+              <details class="manual-entry proposal-manual-entry">
+                <summary>Adicionar item manualmente</summary>
+                <form class="proposal-form" id="proposal-form">
+                  <label>EAN/GTIN ou código <input id="proposal-code" placeholder="789..." /></label>
+                  <label>Descrição do item <input id="proposal-desc" placeholder="Produto ou serviço" required /></label>
+                  <label>Quantidade <input id="proposal-qty" type="number" min="0.01" step="0.01" value="1" required /></label>
+                  <label>Unidade <input id="proposal-unit" value="UNIDADE" /></label>
+                  <label>Valor unitário <input id="proposal-price" type="number" min="0" step="0.01" value="0" required /></label>
+                  <button class="secondary" type="submit"><i data-lucide="plus"></i>Adicionar item</button>
+                </form>
+              </details>
+              <p class="muted-copy">Os itens da proposta não alteram o estoque fiscal nem o cadastro mestre de produtos.</p>
             </div>
             <aside class="proposal-summary">
-              <span class="status-pill ready">Rascunho</span>
+              <span class="status-pill ready" id="proposal-status">Rascunho</span>
+              <small id="proposal-number">Nova proposta</small>
               <h2 id="proposal-total">R$ 0,00</h2>
-              <button class="primary" id="save-proposal" type="button">Salvar proposta</button>
-              <button class="secondary" id="download-proposal" type="button">Baixar proposta</button>
+              <p id="proposal-item-count">0 itens importados</p>
+              <button class="primary" id="download-proposal" type="button"><i data-lucide="file-down"></i>Gerar PDF</button>
+              <button class="secondary" id="save-proposal" type="button"><i data-lucide="save"></i>Salvar proposta</button>
+              <button class="secondary" id="new-proposal" type="button"><i data-lucide="plus"></i>Nova proposta</button>
             </aside>
           </section>
           <section class="panel">
@@ -251,6 +291,7 @@
                     <th>Código</th>
                     <th>Descrição</th>
                     <th>Qtd.</th>
+                    <th>Unidade</th>
                     <th>Valor unit.</th>
                     <th>Total</th>
                     <th>Ação</th>
@@ -274,6 +315,7 @@
                     <th>Data</th>
                     <th>Validade</th>
                     <th>Total</th>
+                    <th>Ação</th>
                   </tr>
                 </thead>
                 <tbody id="saved-proposal-rows"></tbody>
@@ -477,6 +519,8 @@
     <button class="menu-backdrop" id="menu-backdrop" aria-label="Fechar menu" type="button" hidden></button>
     <script src="./vendor/lucide.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="./vendor/jspdf.umd.min.js"></script>
+    <script src="./vendor/jspdf.plugin.autotable.min.js"></script>
     <script src="./app.js"></script>
     <script src="./workspace.js"></script>
   </body>

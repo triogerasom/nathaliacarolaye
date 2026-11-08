@@ -2,8 +2,14 @@ const COMPANY = {
   cnpj: "68205288000174",
   cnpjMasked: "68.205.288/0001-74",
   name: "68.205.288 NATHALIA CAROLAYNE DIAS ARAUJ",
+  displayName: "NATHALIA CAROLAYNE",
   ie: "0056002090061",
   uf: "MG",
+  address: "Rua Paraná, 196 - São Sebastião de Braúnas",
+  city: "Belo Oriente/MG",
+  cep: "35.197-000",
+  phone: "(31) 99762-7719",
+  email: "nathalia.carolayne@icloud.com",
 };
 
 const AUTH_EMAIL = "eu15933220620@gmail.com";
@@ -33,7 +39,11 @@ const initialState = {
   suppliers: {},
   customers: {},
   proposals: [],
-  currentProposal: { customer: "", validity: "", items: [] },
+  currentProposal: {
+    id: "", number: "", customer: "", processUrl: "", processId: "", processNumber: "", object: "",
+    modality: "", portalStatus: "", portalItemCount: 0, deadline: "", title: "Fornecimento de produtos - FIEMG / SESI",
+    proposalType: "Proposta comercial", validityDays: 10, dirty: false, items: [],
+  },
   fiemg: {
     opportunities: [],
     items: {},
@@ -782,23 +792,89 @@ function renderImportResult(doc) {
   enhanceResponsiveTables(document.getElementById("import-result"));
 }
 
+function proposalTotal(proposal = state.currentProposal) {
+  return (proposal.items || []).reduce((sum, item) => sum + Number(item.quantity || 0) * Number(item.unitPrice || 0), 0);
+}
+
+function proposalValidityDate(proposal) {
+  const date = new Date(proposal.createdAt || Date.now());
+  date.setDate(date.getDate() + Number(proposal.validityDays || 10));
+  return date.toISOString().slice(0, 10);
+}
+
+function syncProposalMetaFromForm() {
+  const field = (id) => document.getElementById(id);
+  if (!field("proposal-customer")) return state.currentProposal;
+  Object.assign(state.currentProposal, {
+    customer: field("proposal-customer").value.trim(),
+    processUrl: field("proposal-process-url").value.trim(),
+    processNumber: field("proposal-process-number").value.trim(),
+    object: field("proposal-object").value.trim(),
+    title: field("proposal-title").value.trim(),
+    proposalType: field("proposal-type").value,
+    validityDays: Math.max(1, Number(field("proposal-validity-days").value || 10)),
+    deadline: field("proposal-deadline").value,
+  });
+  return state.currentProposal;
+}
+
+function populateProposalMetaForm() {
+  const proposal = state.currentProposal;
+  const values = {
+    "proposal-customer": proposal.customer || "",
+    "proposal-process-url": proposal.processUrl || "",
+    "proposal-process-number": proposal.processNumber || "",
+    "proposal-object": proposal.object || "",
+    "proposal-title": proposal.title || "",
+    "proposal-type": proposal.proposalType || "Proposta comercial",
+    "proposal-validity-days": proposal.validityDays || 10,
+    "proposal-deadline": isoDate(proposal.deadline),
+  };
+  Object.entries(values).forEach(([id, value]) => {
+    const input = document.getElementById(id);
+    if (input && input.value !== String(value)) input.value = value;
+  });
+}
+
+function renderProposalProcessResult() {
+  const proposal = state.currentProposal;
+  const container = document.getElementById("proposal-process-result");
+  if (!container) return;
+  if (!proposal.processNumber && !proposal.object) {
+    container.innerHTML = "";
+    return;
+  }
+  container.innerHTML = `
+    <div><span>Processo</span><strong>${escapeHtml(proposal.processNumber || "-")}</strong></div>
+    <div><span>Entidade</span><strong>${escapeHtml(proposal.customer || "-")}</strong></div>
+    <div><span>Modalidade</span><strong>${escapeHtml(proposal.modality || "-")}</strong></div>
+    <div><span>Portal</span><strong>${escapeHtml(proposal.portalStatus || "Importado")} · ${number.format(proposal.portalItemCount || 0)} itens</strong></div>`;
+}
+
 function renderProposal() {
   const rows = state.currentProposal.items.map((item, index) => `
     <tr>
-      <td>${escapeHtml(item.code || "-")}</td>
-      <td>${escapeHtml(item.description)}</td>
-      <td>${number.format(item.quantity)}</td>
-      <td>${money.format(item.unitPrice)}</td>
-      <td>${money.format(item.quantity * item.unitPrice)}</td>
+      <td><input class="proposal-table-input proposal-item-input" data-index="${index}" data-field="code" value="${escapeHtml(item.code || "")}" aria-label="Código do item ${index + 1}" /></td>
+      <td><input class="proposal-table-input description proposal-item-input" data-index="${index}" data-field="description" value="${escapeHtml(item.description || "")}" aria-label="Descrição do item ${index + 1}" /></td>
+      <td><input class="proposal-table-input number proposal-item-input" data-index="${index}" data-field="quantity" type="number" min="0" step="0.01" value="${Number(item.quantity || 0)}" aria-label="Quantidade do item ${index + 1}" /></td>
+      <td><input class="proposal-table-input proposal-item-input" data-index="${index}" data-field="unit" value="${escapeHtml(item.unit || "UNIDADE")}" aria-label="Unidade do item ${index + 1}" /></td>
+      <td><input class="proposal-table-input number proposal-item-input" data-index="${index}" data-field="unitPrice" type="number" min="0" step="0.01" value="${Number(item.unitPrice || 0).toFixed(2)}" aria-label="Valor unitário do item ${index + 1}" /></td>
+      <td><strong>${money.format(Number(item.quantity || 0) * Number(item.unitPrice || 0))}</strong></td>
       <td><button class="icon-button remove-proposal-item" data-index="${index}" type="button" title="Remover item" aria-label="Remover item"><i data-lucide="trash-2"></i></button></td>
     </tr>
   `);
-  const total = state.currentProposal.items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
-  document.getElementById("proposal-rows").innerHTML = rows.join("") || emptyRow(6, "Adicione itens pelo EAN/GTIN ou manualmente.");
+  const total = proposalTotal();
+  document.getElementById("proposal-rows").innerHTML = rows.join("") || emptyRow(7, "Importe um CSV ou adicione itens manualmente.");
   document.getElementById("proposal-total").textContent = money.format(total);
-  document.getElementById("saved-proposal-rows").innerHTML = state.proposals.map((proposal) => `
-    <tr><td>${escapeHtml(proposal.number)}</td><td>${escapeHtml(proposal.customer)}</td><td>${formatDate(proposal.createdAt)}</td><td>${formatDate(proposal.validity)}</td><td>${money.format(proposal.total)}</td></tr>
-  `).join("") || emptyRow(5, "Nenhuma proposta salva.");
+  document.getElementById("proposal-item-count").textContent = `${state.currentProposal.items.length} ${state.currentProposal.items.length === 1 ? "item" : "itens"} na proposta`;
+  document.getElementById("proposal-number").textContent = state.currentProposal.number || "Nova proposta";
+  document.getElementById("proposal-status").textContent = state.currentProposal.id ? (state.currentProposal.dirty ? "Alterada" : "Salva") : "Rascunho";
+  document.getElementById("saved-proposal-rows").innerHTML = state.proposals.map((proposal, index) => `
+    <tr><td>${escapeHtml(proposal.number)}</td><td>${escapeHtml(proposal.customer)}</td><td>${formatDate(proposal.createdAt)}</td><td>${formatDate(proposal.validity || proposalValidityDate(proposal))}</td><td>${money.format(proposal.total)}</td><td><button class="icon-button load-proposal-item" data-index="${index}" type="button" title="Abrir proposta" aria-label="Abrir proposta ${escapeHtml(proposal.number)}"><i data-lucide="folder-open"></i></button></td></tr>
+  `).join("") || emptyRow(6, "Nenhuma proposta salva.");
+  populateProposalMetaForm();
+  renderProposalProcessResult();
+  enhanceResponsiveTables(document.getElementById("propostas"));
   window.renderWorkspace?.();
 }
 
@@ -1032,18 +1108,286 @@ function exportParticipants(type) {
   exportWorkbook(`${type}_nathalia.xlsx`, [{ name: type, rows }]);
 }
 
-function downloadProposal() {
-  const total = state.currentProposal.items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
-  const lines = [
-    "PROPOSTA COMERCIAL", COMPANY.name, `CNPJ: ${COMPANY.cnpjMasked}`, "",
-    `Cliente: ${state.currentProposal.customer || document.getElementById("proposal-customer").value || "-"}`,
-    `Validade: ${state.currentProposal.validity || document.getElementById("proposal-validity").value || "-"}`, "",
-    "Codigo;Descricao;Quantidade;Valor unitario;Total",
-    ...state.currentProposal.items.map((item) => `${item.code || ""};${item.description};${item.quantity};${item.unitPrice};${item.quantity * item.unitPrice}`),
-    "", `Total;;;;${total}`,
-  ];
-  downloadBlob(new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" }), "proposta_comercial.csv");
+function parseCsvTable(content, delimiter = ";") {
+  const rows = [];
+  let row = [];
+  let field = "";
+  let quoted = false;
+  const text = String(content || "").replace(/^\uFEFF/, "");
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    if (char === '"') {
+      if (quoted && text[index + 1] === '"') { field += '"'; index += 1; }
+      else quoted = !quoted;
+    } else if (char === delimiter && !quoted) {
+      row.push(field.trim());
+      field = "";
+    } else if ((char === "\n" || char === "\r") && !quoted) {
+      if (char === "\r" && text[index + 1] === "\n") index += 1;
+      row.push(field.trim());
+      if (row.some((value) => value !== "")) rows.push(row);
+      row = [];
+      field = "";
+    } else {
+      field += char;
+    }
+  }
+  row.push(field.trim());
+  if (row.some((value) => value !== "")) rows.push(row);
+  return rows;
 }
+
+function normalizedCsvHeader(value) {
+  return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+}
+
+function parseBrazilianNumber(value) {
+  const clean = String(value ?? "").replace(/R\$/gi, "").replace(/\s/g, "");
+  if (!clean) return 0;
+  const normalized = clean.includes(",") ? clean.replace(/\./g, "").replace(",", ".") : clean;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function parseProposalCsv(content) {
+  const rows = parseCsvTable(content);
+  if (rows.length < 2) throw new Error("O CSV não contém itens para importar.");
+  const headers = rows[0].map(normalizedCsvHeader);
+  const required = ["codigo_produto", "produto", "preco_venda", "quantidade_referencia", "unidade_referencia"];
+  const missing = required.filter((header) => !headers.includes(header));
+  if (missing.length) throw new Error(`Colunas ausentes no CSV: ${missing.join(", ")}.`);
+  const column = Object.fromEntries(headers.map((header, index) => [header, index]));
+  const items = rows.slice(1).map((values, index) => ({
+    id: crypto.randomUUID(),
+    code: values[column.codigo_produto] || String(index + 1),
+    description: values[column.produto] || "",
+    unitPrice: parseBrazilianNumber(values[column.preco_venda]),
+    quantity: parseBrazilianNumber(values[column.quantidade_referencia]),
+    unit: values[column.unidade_referencia] || "UNIDADE",
+    source: "CSV",
+  })).filter((item) => item.description && item.quantity > 0);
+  if (!items.length) throw new Error("Nenhum item válido foi encontrado no CSV.");
+  if (items.some((item) => item.unitPrice < 0)) throw new Error("O CSV contém preço negativo.");
+  return items;
+}
+
+function extractFiemgProcessCode(value) {
+  const raw = String(value || "").trim();
+  try {
+    const url = new URL(raw);
+    const code = url.searchParams.get("nCdProcesso") || url.searchParams.get("process");
+    if (code && /^\d{4,20}$/.test(code)) return code;
+  } catch (error) { /* Accept process numbers without a URL. */ }
+  const typed = raw.match(/(?:SDE|CDE)?\s*(\d{4,20})/i)?.[1];
+  if (!typed) throw new Error("Informe um link FIEMG com o código do processo.");
+  return typed;
+}
+
+function proposalTitleFromProcess(process) {
+  const object = String(process.object || "");
+  const shortObject = object.split(/\s+para\s+|\.\s+/i)[0].replace(/^Aquisição de\s+/i, "Fornecimento de ");
+  const entity = /SENAI/i.test(process.entity || "") ? "SENAI" : /SESI/i.test(process.entity || "") ? "SESI" : "FIEMG";
+  return `${shortObject || "Fornecimento de produtos"} - FIEMG / ${entity}`;
+}
+
+async function fetchProposalProcess() {
+  syncProposalMetaFromForm();
+  const code = extractFiemgProcessCode(state.currentProposal.processUrl || state.currentProposal.processNumber);
+  const button = document.getElementById("proposal-fetch-process");
+  button.disabled = true;
+  button.innerHTML = '<i data-lucide="loader-circle"></i>Consultando...';
+  window.lucide?.createIcons();
+  try {
+    const response = await fetch("/api/fiemg-import", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode: "single", code, includeItems: true }),
+      signal: AbortSignal.timeout(90000),
+    });
+    const payload = await response.json();
+    if (!response.ok || payload.error || !payload.processes?.length) throw new Error(payload.error || "Processo não encontrado no portal FIEMG.");
+    const process = payload.processes[0];
+    Object.assign(state.currentProposal, {
+      processId: String(process.externalProcessId || code),
+      processNumber: process.processNumber || code,
+      customer: process.entity || "SISTEMA FIEMG",
+      object: process.object || "",
+      modality: process.modality || "",
+      portalStatus: process.portalStatus || "",
+      portalItemCount: Number(process.itemCount || process.items?.length || 0),
+      deadline: isoDate(process.deadline),
+      title: proposalTitleFromProcess(process),
+      dirty: true,
+    });
+    upsertFiemgProcess(process);
+    saveState();
+    renderProposal();
+    showToast(`Processo ${state.currentProposal.processNumber} carregado do portal FIEMG.`);
+  } finally {
+    button.disabled = false;
+    button.innerHTML = '<i data-lucide="cloud-download"></i>Buscar processo';
+    window.lucide?.createIcons();
+  }
+}
+
+let proposalLogoData = "";
+async function loadProposalLogoData() {
+  if (proposalLogoData) return proposalLogoData;
+  const image = new Image();
+  image.src = "./assets/logo-nathalia.png";
+  await new Promise((resolve, reject) => { image.onload = resolve; image.onerror = reject; });
+  const canvas = document.createElement("canvas");
+  canvas.width = 320;
+  canvas.height = 320;
+  const context = canvas.getContext("2d");
+  context.fillStyle = "#ffffff";
+  context.fillRect(0, 0, 320, 320);
+  context.drawImage(image, 0, 0, 320, 320);
+  proposalLogoData = canvas.toDataURL("image/jpeg", 0.86);
+  return proposalLogoData;
+}
+
+function pdfDate(value = new Date()) {
+  const date = value instanceof Date ? value : new Date(value);
+  return date.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+}
+
+function proposalFilename(proposal) {
+  const reference = proposal.processNumber || proposal.number || "comercial";
+  return `proposta_${reference}`.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]+/g, "_").replace(/^_|_$/g, "").toLowerCase() + ".pdf";
+}
+
+function proposalUnitLabel(value) {
+  const unit = String(value || "UN").trim().toUpperCase();
+  return ({ UNIDADE: "UN", UNIDADES: "UN", QUILOGRAMA: "KG", LITRO: "L", CAIXA: "CX", PACOTE: "PCT" })[unit] || unit;
+}
+
+async function downloadProposal() {
+  syncProposalMetaFromForm();
+  const proposal = state.currentProposal;
+  if (!proposal.customer) return showToast("Busque o processo ou informe o cliente da proposta.");
+  if (!proposal.items.length) return showToast("Importe o CSV com os itens antes de gerar o PDF.");
+  if (!window.jspdf?.jsPDF) return showToast("O gerador de PDF ainda não carregou. Atualize a página e tente novamente.");
+  const button = document.getElementById("download-proposal");
+  button.disabled = true;
+  try {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait", compress: true });
+    if (typeof doc.autoTable !== "function") throw new Error("A tabela do PDF não foi carregada.");
+    const logo = await loadProposalLogoData();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const margin = 14;
+    const gold = [174, 126, 28];
+    const ink = [27, 29, 33];
+    const muted = [96, 102, 112];
+
+    doc.addImage(logo, "JPEG", margin, 9, 24, 24, undefined, "FAST");
+    doc.setTextColor(...ink);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12);
+    doc.text("NATHALIA CAROLAYNE", 42, 17);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(...muted);
+    doc.setFontSize(8);
+    doc.text("COMÉRCIO E DISTRIBUIÇÃO", 42, 22);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(...ink);
+    doc.setFontSize(20);
+    doc.text("PROPOSTA COMERCIAL", pageWidth - margin, 17, { align: "right" });
+    doc.setFontSize(10);
+    doc.setTextColor(...gold);
+    doc.text(proposal.title || "Fornecimento de produtos", pageWidth - margin, 24, { align: "right", maxWidth: 130 });
+    doc.setDrawColor(...gold);
+    doc.setLineWidth(0.7);
+    doc.line(margin, 35, pageWidth - margin, 35);
+
+    const objectLines = doc.splitTextToSize(proposal.object || "Objeto não informado", pageWidth - margin * 2 - 4);
+    const infoY = 40;
+    const infoHeight = 43 + Math.max(0, objectLines.length - 1) * 4;
+    doc.setFillColor(247, 247, 245);
+    doc.setDrawColor(222, 218, 205);
+    doc.roundedRect(margin, infoY, pageWidth - margin * 2, infoHeight, 1, 1, "FD");
+    doc.setFontSize(7.7);
+    doc.setTextColor(...ink);
+    const left = [
+      ["Proponente", COMPANY.name], ["CNPJ", COMPANY.cnpjMasked], ["Endereço", COMPANY.address],
+      ["Cidade", `${COMPANY.city} - CEP ${COMPANY.cep}`], ["Contato", `${COMPANY.phone} · ${COMPANY.email}`],
+    ];
+    const right = [
+      ["Data", pdfDate()], ["Referência", proposal.processNumber || proposal.processId || "-"],
+      ["Cliente", proposal.customer], ["Validade", `${proposal.validityDays || 10} dias`], ["Tipo", proposal.proposalType || "Proposta comercial"],
+    ];
+    const writeMeta = (rows, labelX, valueX, maxWidth, y) => rows.forEach(([label, value], index) => {
+      doc.setFont("helvetica", "bold"); doc.text(`${label}:`, labelX, y + index * 5);
+      doc.setFont("helvetica", "normal"); doc.text(String(value || "-"), valueX, y + index * 5, { maxWidth });
+    });
+    writeMeta(left, margin + 4, 38, 68, infoY + 7);
+    writeMeta(right, 110, 132, 60, infoY + 7);
+    doc.setFont("helvetica", "bold");
+    doc.text("Objeto:", margin + 4, infoY + 34);
+    doc.setFont("helvetica", "normal");
+    doc.text(objectLines, margin + 18, infoY + 34);
+
+    const rows = proposal.items.map((item, index) => [
+      String(index + 1), String(item.code || ""), String(item.description || ""), number.format(Number(item.quantity || 0)),
+      proposalUnitLabel(item.unit), money.format(Number(item.unitPrice || 0)), money.format(Number(item.quantity || 0) * Number(item.unitPrice || 0)),
+    ]);
+    doc.autoTable({
+      startY: infoY + infoHeight + 10,
+      head: [["Item", "Código", "Descrição", "Qtd.", "Un.", "Valor unit.", "Valor total"]],
+      body: rows,
+      foot: [[{ content: "TOTAL GERAL", colSpan: 6, styles: { halign: "right", fontStyle: "bold" } }, { content: money.format(proposalTotal(proposal)), styles: { halign: "right", fontStyle: "bold" } }]],
+      theme: "grid",
+      margin: { left: margin, right: margin, top: 22, bottom: 18 },
+      styles: { font: "helvetica", fontSize: 8, cellPadding: 2.7, lineColor: [224, 224, 220], lineWidth: 0.2, textColor: ink, valign: "middle" },
+      headStyles: { fillColor: ink, textColor: [255, 255, 255], fontStyle: "bold" },
+      footStyles: { fillColor: [244, 241, 232], textColor: ink, lineColor: gold },
+      showFoot: "lastPage",
+      alternateRowStyles: { fillColor: [250, 250, 249] },
+      columnStyles: { 0: { cellWidth: 12, halign: "center" }, 1: { cellWidth: 20 }, 2: { cellWidth: 68 }, 3: { cellWidth: 14, halign: "right" }, 4: { cellWidth: 12 }, 5: { cellWidth: 25, halign: "right" }, 6: { cellWidth: 31, halign: "right" } },
+      didDrawPage: (data) => {
+        if (data.pageNumber > 1) {
+          doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.setTextColor(...ink);
+          doc.text(`PROPOSTA COMERCIAL · ${proposal.processNumber || "NATHALIA CAROLAYNE"}`, margin, 13);
+          doc.setDrawColor(...gold); doc.line(margin, 16, pageWidth - margin, 16);
+        }
+      },
+    });
+
+    let y = doc.lastAutoTable.finalY + 10;
+    if (y > 245) { doc.addPage(); y = 24; }
+    doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.setTextColor(...ink); doc.text("Condições gerais", margin, y);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); doc.setTextColor(...muted);
+    const conditions = [
+      "Preços expressos em reais (R$).",
+      "Quantidades e preços conforme o arquivo CSV importado para esta proposta.",
+      "Custos indiretos, frete e armazenagem considerados na formação dos preços.",
+      `Validade desta proposta: ${proposal.validityDays || 10} dias a partir da data de emissão.`,
+      "Fornecimento sujeito às condições e aos prazos definidos no processo de contratação.",
+    ];
+    conditions.forEach((condition, index) => doc.text(`• ${condition}`, margin, y + 6 + index * 4.6));
+    const signatureY = y + 41;
+    doc.setDrawColor(70, 70, 70); doc.line(55, signatureY, 155, signatureY);
+    doc.setFont("helvetica", "normal"); doc.setTextColor(...ink); doc.setFontSize(8.5);
+    doc.text(COMPANY.name, 105, signatureY + 5, { align: "center" });
+    doc.text(`CNPJ: ${COMPANY.cnpjMasked}`, 105, signatureY + 9, { align: "center" });
+
+    const totalPages = doc.internal.getNumberOfPages();
+    for (let page = 1; page <= totalPages; page += 1) {
+      doc.setPage(page); doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(120, 120, 120);
+      doc.text(`${COMPANY.displayName} · ${COMPANY.cnpjMasked}`, margin, 290);
+      doc.text(`Página ${page} de ${totalPages}`, pageWidth - margin, 290, { align: "right" });
+    }
+    doc.save(proposalFilename(proposal));
+    showToast("Proposta comercial gerada em PDF.");
+  } catch (error) {
+    showToast(error.message || "Não foi possível gerar o PDF.");
+  } finally {
+    button.disabled = false;
+  }
+}
+window.parseProposalCsv = parseProposalCsv;
+window.downloadProposal = downloadProposal;
 
 document.querySelectorAll(".nav-item, .nav-shortcut").forEach((button) => button.addEventListener("click", () => switchView(button.dataset.view)));
 
@@ -1060,14 +1404,39 @@ document.addEventListener("change", (event) => {
   if (event.target.classList.contains("conversion-input")) {
     updateFiscalConversion(event.target.dataset.document, Number(event.target.dataset.item), Number(event.target.value));
   }
+  if (event.target.classList.contains("proposal-item-input")) {
+    const item = state.currentProposal.items[Number(event.target.dataset.index)];
+    if (item) {
+      const field = event.target.dataset.field;
+      item[field] = ["quantity", "unitPrice"].includes(field) ? Math.max(0, Number(event.target.value || 0)) : event.target.value.trim();
+      state.currentProposal.dirty = true;
+      saveState();
+      renderProposal();
+    }
+  }
+  if (event.target.closest("#proposal-meta-form")) {
+    syncProposalMetaFromForm();
+    state.currentProposal.dirty = true;
+    saveState();
+    renderProposalProcessResult();
+  }
 });
 
 document.addEventListener("click", (event) => {
   const removeButton = event.target.closest(".remove-proposal-item");
   if (removeButton) {
     state.currentProposal.items.splice(Number(removeButton.dataset.index), 1);
+    state.currentProposal.dirty = true;
     saveState();
     renderProposal();
+  }
+  const loadButton = event.target.closest(".load-proposal-item");
+  if (loadButton) {
+    state.currentProposal = structuredClone(state.proposals[Number(loadButton.dataset.index)]);
+    saveState();
+    renderProposal();
+    switchView("propostas");
+    showToast(`${state.currentProposal.number} aberta para edição.`);
   }
 });
 
@@ -1188,15 +1557,17 @@ document.getElementById("proposal-code").addEventListener("blur", (event) => {
 
 document.getElementById("proposal-form").addEventListener("submit", (event) => {
   event.preventDefault();
-  state.currentProposal.customer = document.getElementById("proposal-customer").value.trim();
-  state.currentProposal.validity = document.getElementById("proposal-validity").value;
+  syncProposalMetaFromForm();
   state.currentProposal.items.push({
     id: crypto.randomUUID(),
     code: document.getElementById("proposal-code").value.trim(),
     description: document.getElementById("proposal-desc").value.trim(),
     quantity: toNumber(document.getElementById("proposal-qty").value),
     unitPrice: toNumber(document.getElementById("proposal-price").value),
+    unit: document.getElementById("proposal-unit").value.trim() || "UNIDADE",
+    source: "manual",
   });
+  state.currentProposal.dirty = true;
   document.getElementById("proposal-code").value = "";
   document.getElementById("proposal-desc").value = "";
   document.getElementById("proposal-qty").value = "1";
@@ -1206,24 +1577,58 @@ document.getElementById("proposal-form").addEventListener("submit", (event) => {
 });
 
 document.getElementById("save-proposal").addEventListener("click", () => {
-  const customer = document.getElementById("proposal-customer").value.trim() || state.currentProposal.customer;
-  if (!customer || !state.currentProposal.items.length) return showToast("Informe cliente e pelo menos um item.");
-  const total = state.currentProposal.items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
-  state.proposals.unshift({
-    id: crypto.randomUUID(),
-    number: `PROP-${String(state.proposals.length + 1).padStart(4, "0")}`,
-    customer,
-    validity: document.getElementById("proposal-validity").value || state.currentProposal.validity,
-    items: structuredClone(state.currentProposal.items),
-    total,
-    createdAt: new Date().toISOString(),
-  });
-  state.currentProposal = structuredClone(initialState.currentProposal);
-  document.getElementById("proposal-customer").value = "";
-  document.getElementById("proposal-validity").value = "";
+  syncProposalMetaFromForm();
+  if (!state.currentProposal.customer || !state.currentProposal.items.length) return showToast("Informe o cliente e importe pelo menos um item.");
+  const createdAt = state.currentProposal.createdAt || new Date().toISOString();
+  const numberValue = state.currentProposal.number || `PROP-${new Date().getFullYear()}-${String(state.proposals.length + 1).padStart(4, "0")}`;
+  const saved = {
+    ...structuredClone(state.currentProposal),
+    id: state.currentProposal.id || crypto.randomUUID(),
+    number: numberValue,
+    total: proposalTotal(),
+    validity: proposalValidityDate({ ...state.currentProposal, createdAt }),
+    createdAt,
+    updatedAt: new Date().toISOString(),
+    dirty: false,
+  };
+  const existing = state.proposals.findIndex((proposal) => proposal.id === saved.id);
+  if (existing >= 0) state.proposals[existing] = saved;
+  else state.proposals.unshift(saved);
+  state.currentProposal = structuredClone(saved);
   saveState();
   renderProposal();
-  showToast("Proposta salva sem movimentar estoque.");
+  showToast(`${saved.number} salva sem movimentar o estoque.`);
+});
+
+document.getElementById("new-proposal").addEventListener("click", () => {
+  state.currentProposal = structuredClone(initialState.currentProposal);
+  document.getElementById("proposal-csv-name").textContent = "Nenhum arquivo selecionado";
+  saveState();
+  renderProposal();
+  showToast("Nova proposta iniciada.");
+});
+
+document.getElementById("proposal-fetch-process").addEventListener("click", () => {
+  fetchProposalProcess().catch((error) => showToast(error.message || "Não foi possível consultar o processo FIEMG."));
+});
+
+document.getElementById("proposal-choose-csv").addEventListener("click", () => document.getElementById("proposal-csv-input").click());
+document.getElementById("proposal-csv-input").addEventListener("change", async (event) => {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  try {
+    syncProposalMetaFromForm();
+    state.currentProposal.items = parseProposalCsv(await file.text());
+    state.currentProposal.dirty = true;
+    document.getElementById("proposal-csv-name").textContent = `${file.name} · ${state.currentProposal.items.length} itens`;
+    saveState();
+    renderProposal();
+    showToast(`${state.currentProposal.items.length} itens importados do CSV.`);
+  } catch (error) {
+    showToast(error.message || "Não foi possível importar o CSV.");
+  } finally {
+    event.target.value = "";
+  }
 });
 
 document.getElementById("fiemg-import-form").addEventListener("submit", async (event) => {

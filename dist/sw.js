@@ -1,4 +1,4 @@
-const CACHE_NAME = "nathalia-fiscal-executive-v7";
+const CACHE_NAME = "nathalia-fiscal-executive-v8";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -8,6 +8,8 @@ const APP_SHELL = [
   "./fiemg-detail.html",
   "./fiemg-detail.js",
   "./vendor/lucide.min.js",
+  "./vendor/jspdf.umd.min.js",
+  "./vendor/jspdf.plugin.autotable.min.js",
   "./manifest.webmanifest",
   "./assets/logo-nathalia.png",
 ];
