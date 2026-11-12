@@ -42,7 +42,7 @@ const initialState = {
   currentProposal: {
     id: "", number: "", customer: "", processUrl: "", processId: "", processNumber: "", object: "",
     modality: "", portalStatus: "", portalItemCount: 0, processItems: [], deadline: "", title: "Fornecimento de produtos - FIEMG / SESI",
-    proposalType: "Proposta comercial", validityDays: 10, paymentTerms: "28 dias", deliveryDays: "", freight: "Não informado", notes: "", dirty: false, items: [],
+    proposalMode: "fiemg", proposalType: "Proposta comercial", validityDays: 10, paymentTerms: "28 dias", deliveryDays: "", freight: "Não informado", notes: "", dirty: false, items: [],
   },
   fiemg: {
     opportunities: [],
@@ -67,6 +67,15 @@ function plainPortalText(value) {
   return String(value || "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
 }
 
+function normalizeProposalState(proposal = {}) {
+  return {
+    ...structuredClone(initialState.currentProposal),
+    ...proposal,
+    processItems: proposal.processItems || [],
+    items: proposal.items || [],
+  };
+}
+
 function loadState() {
   const saved = localStorage.getItem("nathaliaFiscalState");
   const loaded = saved ? JSON.parse(saved) : {};
@@ -80,18 +89,14 @@ function loadState() {
     batches: loaded.batches || [],
     suppliers: loaded.suppliers || {},
     customers: loaded.customers || {},
-    proposals: loaded.proposals || [],
+    proposals: (loaded.proposals || []).map(normalizeProposalState),
     fiemg: {
       ...structuredClone(initialState.fiemg),
       ...(loaded.fiemg || {}),
       opportunities: loaded.fiemg?.opportunities || [],
       items: loaded.fiemg?.items || {},
     },
-    currentProposal: {
-      ...structuredClone(initialState.currentProposal),
-      ...(loaded.currentProposal || {}),
-      items: loaded.currentProposal?.items || [],
-    },
+    currentProposal: normalizeProposalState(loaded.currentProposal),
   };
 }
 
@@ -423,7 +428,15 @@ async function loadRemoteState() {
     .select("data")
     .eq("company_cnpj", COMPANY.cnpj)
     .maybeSingle();
-  if (!error && data?.data) state = { ...state, ...data.data, auth: { ...state.auth, ...(data.data.auth || {}), loggedIn: true } };
+  if (!error && data?.data) {
+    state = {
+      ...state,
+      ...data.data,
+      auth: { ...state.auth, ...(data.data.auth || {}), loggedIn: true },
+      proposals: (data.data.proposals || state.proposals || []).map(normalizeProposalState),
+      currentProposal: normalizeProposalState(data.data.currentProposal || state.currentProposal),
+    };
+  }
   state.fiemg = { ...structuredClone(initialState.fiemg), ...(state.fiemg || {}) };
   rebuildFiscalLedger();
   await loadFiemgRemote(true);
@@ -843,14 +856,15 @@ function proposalCommercialSummary(proposal = state.currentProposal) {
 
 function proposalValidation(proposal = state.currentProposal) {
   const issues = [];
-  if (!proposal.processNumber) issues.push({ type: "warning", text: "Processo ainda não consultado" });
+  const manualMode = proposal.proposalMode === "manual";
+  if (!manualMode && !proposal.processNumber) issues.push({ type: "warning", text: "Processo ainda não consultado" });
   if (!proposal.customer) issues.push({ type: "error", text: "Cliente ou entidade não informado" });
   if (!proposal.title) issues.push({ type: "warning", text: "Título da proposta não informado" });
   if (!(proposal.items || []).length) issues.push({ type: "error", text: "Nenhum item incluído" });
   const zeroPrices = (proposal.items || []).filter((item) => Number(item.unitPrice || 0) <= 0).length;
   if (zeroPrices) issues.push({ type: "error", text: `${zeroPrices} ${zeroPrices === 1 ? "item sem preço" : "itens sem preço"}` });
   const csvQuantities = (proposal.items || []).filter((item) => item.quantitySource === "csv").length;
-  if (csvQuantities && proposal.processItems?.length) issues.push({ type: "warning", text: `${csvQuantities} ${csvQuantities === 1 ? "quantidade não conciliada" : "quantidades não conciliadas"}` });
+  if (!manualMode && csvQuantities && proposal.processItems?.length) issues.push({ type: "warning", text: `${csvQuantities} ${csvQuantities === 1 ? "quantidade não conciliada" : "quantidades não conciliadas"}` });
   const commercial = proposalCommercialSummary(proposal);
   if ((proposal.items || []).length && !commercial.costCoverageComplete) issues.push({ type: "warning", text: `Custo identificado em ${commercial.costedItems} de ${proposal.items.length} itens` });
   if (!proposal.paymentTerms) issues.push({ type: "warning", text: "Condição de pagamento não informada" });
@@ -900,6 +914,25 @@ function populateProposalMetaForm() {
   });
 }
 
+function applyProposalMode() {
+  const manualMode = state.currentProposal.proposalMode === "manual";
+  document.getElementById("propostas")?.classList.toggle("proposal-manual-mode", manualMode);
+  document.querySelectorAll(".proposal-mode-option").forEach((button) => {
+    const active = button.dataset.proposalMode === state.currentProposal.proposalMode;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+  document.getElementById("proposal-origin-title").textContent = manualMode ? "Dados da proposta manual" : "Processo de contratação";
+  document.getElementById("proposal-origin-description").textContent = manualMode ? "Cadastre o cliente e o escopo sem vincular a proposta a um processo." : "Cole o link da FIEMG para preencher os dados oficiais automaticamente.";
+  document.getElementById("proposal-step-process-label").textContent = manualMode ? "Cadastro" : "Processo";
+  document.getElementById("proposal-step-process-hint").textContent = manualMode ? "Cliente e escopo" : "Dados da contratação";
+  document.getElementById("proposal-object-label").textContent = manualMode ? "Escopo / objeto da proposta" : "Objeto da contratação";
+  document.getElementById("proposal-deadline-label").textContent = manualMode ? "Prazo de resposta" : "Prazo do processo";
+  document.getElementById("proposal-items-description").textContent = manualMode ? "Importe o CSV ou adicione itens manualmente e ajuste os valores antes de enviar." : "Importe o CSV, confira a conciliação FIEMG e ajuste os valores antes de enviar.";
+  document.getElementById("proposal-object").placeholder = manualMode ? "Descreva o fornecimento, serviço ou necessidade do cliente" : "Objeto publicado no processo";
+  document.getElementById("proposal-process-result").hidden = manualMode;
+}
+
 function renderProposalProcessResult() {
   const proposal = state.currentProposal;
   const container = document.getElementById("proposal-process-result");
@@ -922,7 +955,7 @@ function renderProposal() {
       <td><input class="proposal-table-input description proposal-item-input" data-index="${index}" data-field="description" value="${escapeHtml(item.description || "")}" aria-label="Descrição do item ${index + 1}" /></td>
       <td>
         <input class="proposal-table-input number proposal-item-input" data-index="${index}" data-field="quantity" type="number" min="0" step="0.01" value="${Number(item.quantity || 0)}" aria-label="Quantidade do item ${index + 1}" />
-        <small class="quantity-source ${item.quantitySource === "fiemg" ? "fiemg" : ""}">${item.quantitySource === "fiemg" ? `Conferida na FIEMG · item ${escapeHtml(item.portalItemOrder || "-")}` : item.quantitySource === "manual" ? "Ajustada manualmente" : "Quantidade do CSV"}</small>
+        <small class="quantity-source ${item.quantitySource === "fiemg" ? "fiemg" : ""}">${item.quantitySource === "fiemg" ? `Conferida na FIEMG · item ${escapeHtml(item.portalItemOrder || "-")}` : item.quantitySource === "manual" ? "Ajustada manualmente" : state.currentProposal.proposalMode === "manual" ? "Informada no CSV" : "Quantidade do CSV"}</small>
       </td>
       <td><input class="proposal-table-input proposal-item-input" data-index="${index}" data-field="unit" value="${escapeHtml(item.unit || "UNIDADE")}" aria-label="Unidade do item ${index + 1}" /></td>
       <td><input class="proposal-table-input number proposal-item-input" data-index="${index}" data-field="unitPrice" type="number" min="0" step="0.01" value="${Number(item.unitPrice || 0).toFixed(2)}" aria-label="Valor unitário do item ${index + 1}" /></td>
@@ -938,7 +971,9 @@ function renderProposal() {
   document.getElementById("proposal-rows").innerHTML = rows.join("") || emptyRow(7, "Importe um CSV ou adicione itens manualmente.");
   document.getElementById("proposal-total").textContent = money.format(total);
   document.getElementById("proposal-item-count").textContent = state.currentProposal.items.length
-    ? `${state.currentProposal.items.length} ${state.currentProposal.items.length === 1 ? "item" : "itens"} · ${matchedQuantities} ${matchedQuantities === 1 ? "quantidade conferida" : "quantidades conferidas"} na FIEMG${unmatchedQuantities ? ` · ${unmatchedQuantities} do CSV` : ""}`
+    ? state.currentProposal.proposalMode === "manual"
+      ? `${state.currentProposal.items.length} ${state.currentProposal.items.length === 1 ? "item" : "itens"} · ${number.format(commercial.totalUnits)} unidades informadas`
+      : `${state.currentProposal.items.length} ${state.currentProposal.items.length === 1 ? "item" : "itens"} · ${matchedQuantities} ${matchedQuantities === 1 ? "quantidade conferida" : "quantidades conferidas"} na FIEMG${unmatchedQuantities ? ` · ${unmatchedQuantities} do CSV` : ""}`
     : "Nenhum item na proposta";
   document.getElementById("proposal-number").textContent = state.currentProposal.number || "Nova proposta";
   document.getElementById("proposal-status").textContent = state.currentProposal.id ? (state.currentProposal.dirty ? "Alterada" : "Salva") : "Rascunho";
@@ -956,7 +991,7 @@ function renderProposal() {
     ? issues.slice(0, 5).map((issue) => `<li class="${issue.type}"><i data-lucide="${issue.type === "error" ? "circle-alert" : "triangle-alert"}"></i>${escapeHtml(issue.text)}</li>`).join("")
     : '<li class="success"><i data-lucide="circle-check"></i>Dados comerciais conferidos</li>';
   ["proposal-step-process", "proposal-step-items", "proposal-step-review", "proposal-step-document"].forEach((id) => document.getElementById(id)?.classList.remove("complete", "active"));
-  const processComplete = Boolean(state.currentProposal.customer && state.currentProposal.processNumber);
+  const processComplete = Boolean(state.currentProposal.customer && (state.currentProposal.proposalMode === "manual" || state.currentProposal.processNumber));
   const itemsComplete = state.currentProposal.items.length > 0;
   const reviewComplete = itemsComplete && !issues.some((issue) => issue.type === "error");
   if (processComplete) document.getElementById("proposal-step-process")?.classList.add("complete");
@@ -968,7 +1003,7 @@ function renderProposal() {
   if (state.currentProposal.id && !state.currentProposal.dirty) document.getElementById("proposal-step-document")?.classList.add("complete");
   else if (reviewComplete) document.getElementById("proposal-step-document")?.classList.add("active");
   document.getElementById("saved-proposal-rows").innerHTML = state.proposals.map((proposal, index) => `
-    <tr data-search="${escapeHtml(`${proposal.number || ""} ${proposal.customer || ""} ${proposal.processNumber || ""}`.toLowerCase())}"><td><strong>${escapeHtml(proposal.number)}</strong><br><small>${escapeHtml(proposal.proposalType || "Proposta comercial")}</small></td><td>${escapeHtml(proposal.customer)}</td><td>${escapeHtml(proposal.processNumber || "-")}</td><td>${formatDate(proposal.updatedAt || proposal.createdAt)}</td><td>${formatDate(proposal.validity || proposalValidityDate(proposal))}</td><td><strong>${money.format(proposal.total)}</strong></td><td><span class="row-actions"><button class="icon-button load-proposal-item" data-index="${index}" type="button" title="Abrir proposta" aria-label="Abrir proposta ${escapeHtml(proposal.number)}"><i data-lucide="folder-open"></i></button><button class="icon-button duplicate-proposal-item" data-index="${index}" type="button" title="Duplicar proposta" aria-label="Duplicar proposta ${escapeHtml(proposal.number)}"><i data-lucide="copy-plus"></i></button></span></td></tr>
+    <tr data-search="${escapeHtml(`${proposal.number || ""} ${proposal.customer || ""} ${proposal.processNumber || ""}`.toLowerCase())}"><td><strong>${escapeHtml(proposal.number)}</strong><br><small>${escapeHtml(proposal.proposalType || "Proposta comercial")}</small></td><td>${escapeHtml(proposal.customer)}</td><td>${escapeHtml(proposal.proposalMode === "manual" ? "Proposta manual" : proposal.processNumber || "-")}</td><td>${formatDate(proposal.updatedAt || proposal.createdAt)}</td><td>${formatDate(proposal.validity || proposalValidityDate(proposal))}</td><td><strong>${money.format(proposal.total)}</strong></td><td><span class="row-actions"><button class="icon-button load-proposal-item" data-index="${index}" type="button" title="Abrir proposta" aria-label="Abrir proposta ${escapeHtml(proposal.number)}"><i data-lucide="folder-open"></i></button><button class="icon-button duplicate-proposal-item" data-index="${index}" type="button" title="Duplicar proposta" aria-label="Duplicar proposta ${escapeHtml(proposal.number)}"><i data-lucide="copy-plus"></i></button></span></td></tr>
   `).join("") || emptyRow(7, "Nenhuma proposta salva.");
   document.getElementById("proposal-visible-items").textContent = `${state.currentProposal.items.length} ${state.currentProposal.items.length === 1 ? "item" : "itens"}`;
   document.getElementById("proposal-items-toggle").hidden = state.currentProposal.items.length <= 8;
@@ -976,6 +1011,7 @@ function renderProposal() {
   document.querySelector(".proposal-items-panel")?.classList.toggle("expanded", proposalItemsExpanded);
   document.getElementById("proposal-history-count").textContent = `${state.proposals.length} ${state.proposals.length === 1 ? "proposta" : "propostas"}`;
   populateProposalMetaForm();
+  applyProposalMode();
   renderProposalProcessResult();
   enhanceResponsiveTables(document.getElementById("propostas"));
   filterProposalTables();
@@ -1323,7 +1359,7 @@ function reconcileProposalItems(items, processItems = []) {
   });
 }
 
-function parseProposalCsv(content, processItems = state.currentProposal.processItems || []) {
+function parseProposalCsv(content, processItems = state.currentProposal.proposalMode === "manual" ? [] : state.currentProposal.processItems || []) {
   const rows = parseCsvTable(content);
   if (rows.length < 2) throw new Error("O CSV não contém itens para importar.");
   const headers = rows[0].map(normalizedCsvHeader);
@@ -1382,6 +1418,7 @@ async function fetchProposalProcess() {
     if (!response.ok || payload.error || !payload.processes?.length) throw new Error(payload.error || "Processo não encontrado no portal FIEMG.");
     const process = payload.processes[0];
     Object.assign(state.currentProposal, {
+      proposalMode: "fiemg",
       processId: String(process.externalProcessId || code),
       processNumber: process.processNumber || code,
       customer: process.entity || "SISTEMA FIEMG",
@@ -1429,7 +1466,7 @@ function pdfDate(value = new Date()) {
 }
 
 function proposalFilename(proposal) {
-  const reference = proposal.processNumber || proposal.number || "comercial";
+  const reference = proposal.proposalMode === "manual" ? proposal.number || "manual" : proposal.processNumber || proposal.number || "comercial";
   return `proposta_${reference}`.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]+/g, "_").replace(/^_|_$/g, "").toLowerCase() + ".pdf";
 }
 
@@ -1490,7 +1527,7 @@ async function downloadProposal() {
       ["Cidade", `${COMPANY.city} - CEP ${COMPANY.cep}`], ["Contato", `${COMPANY.phone} · ${COMPANY.email}`],
     ];
     const right = [
-      ["Data", pdfDate()], ["Referência", proposal.processNumber || proposal.processId || "-"],
+      ["Data", pdfDate()], ["Referência", proposal.proposalMode === "manual" ? proposal.number || "Proposta manual" : proposal.processNumber || proposal.processId || "-"],
       ["Cliente", proposal.customer], ["Validade", `${proposal.validityDays || 10} dias`], ["Tipo", proposal.proposalType || "Proposta comercial"],
     ];
     const writeMeta = (rows, labelX, valueX, maxWidth, y) => rows.forEach(([label, value], index) => {
@@ -1524,7 +1561,7 @@ async function downloadProposal() {
       didDrawPage: (data) => {
         if (data.pageNumber > 1) {
           doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.setTextColor(...ink);
-          doc.text(`PROPOSTA COMERCIAL · ${proposal.processNumber || "NATHALIA CAROLAYNE"}`, margin, 13);
+          doc.text(`PROPOSTA COMERCIAL · ${proposal.proposalMode === "manual" ? proposal.number || "NATHALIA CAROLAYNE" : proposal.processNumber || "NATHALIA CAROLAYNE"}`, margin, 13);
           doc.setDrawColor(...gold); doc.line(margin, 16, pageWidth - margin, 16);
         }
       },
@@ -1536,7 +1573,7 @@ async function downloadProposal() {
     doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); doc.setTextColor(...muted);
     const conditions = [
       "Preços expressos em reais (R$).",
-      "Quantidades conferidas no processo FIEMG e preços conforme o arquivo CSV importado.",
+      proposal.proposalMode === "manual" ? "Quantidades e preços conforme os itens cadastrados nesta proposta." : "Quantidades conferidas no processo FIEMG e preços conforme o arquivo CSV importado.",
       `Condição de pagamento: ${proposal.paymentTerms || "não informada"}.`,
       `Prazo de entrega: ${proposal.deliveryDays === "" || proposal.deliveryDays == null ? "não informado" : `${proposal.deliveryDays} dias`}. Frete: ${proposal.freight || "não informado"}.`,
       `Validade desta proposta: ${proposal.validityDays || 10} dias a partir da data de emissão.`,
@@ -1614,7 +1651,7 @@ document.addEventListener("click", (event) => {
   }
   const loadButton = event.target.closest(".load-proposal-item");
   if (loadButton) {
-    state.currentProposal = structuredClone(state.proposals[Number(loadButton.dataset.index)]);
+    state.currentProposal = normalizeProposalState(structuredClone(state.proposals[Number(loadButton.dataset.index)]));
     if (state.currentProposal.processItems?.length) {
       const before = state.currentProposal.items.map((item) => Number(item.quantity || 0)).join("|");
       state.currentProposal.items = reconcileProposalItems(state.currentProposal.items || [], state.currentProposal.processItems);
@@ -1631,7 +1668,7 @@ document.addEventListener("click", (event) => {
   }
   const duplicateButton = event.target.closest(".duplicate-proposal-item");
   if (duplicateButton) {
-    const source = structuredClone(state.proposals[Number(duplicateButton.dataset.index)]);
+    const source = normalizeProposalState(structuredClone(state.proposals[Number(duplicateButton.dataset.index)]));
     state.currentProposal = {
       ...source,
       id: "",
@@ -1824,6 +1861,17 @@ document.getElementById("proposal-fetch-process").addEventListener("click", () =
 
 document.getElementById("proposal-summary-pdf").addEventListener("click", () => document.getElementById("download-proposal").click());
 document.getElementById("proposal-summary-save").addEventListener("click", () => document.getElementById("save-proposal").click());
+document.querySelectorAll(".proposal-mode-option").forEach((button) => button.addEventListener("click", () => {
+  syncProposalMetaFromForm();
+  const mode = button.dataset.proposalMode;
+  if (state.currentProposal.proposalMode === mode) return;
+  state.currentProposal.proposalMode = mode;
+  if (mode === "manual" && (!state.currentProposal.title || state.currentProposal.title === initialState.currentProposal.title)) state.currentProposal.title = "Fornecimento de produtos";
+  state.currentProposal.dirty = true;
+  saveState();
+  renderProposal();
+  showToast(mode === "manual" ? "Modo manual ativado. Nenhum processo será exigido." : "Modo FIEMG ativado.");
+}));
 document.getElementById("proposal-item-search").addEventListener("input", filterProposalTables);
 document.getElementById("proposal-history-search").addEventListener("input", filterProposalTables);
 document.getElementById("proposal-items-toggle").addEventListener("click", () => {

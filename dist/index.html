@@ -221,7 +221,7 @@
               <h2>Central de propostas</h2>
               <p>Monte, confira e apresente propostas com rastreabilidade do processo até o PDF final.</p>
               <div class="proposal-progress" aria-label="Etapas da proposta">
-                <div class="proposal-step" id="proposal-step-process"><span>1</span><div><strong>Processo</strong><small>Dados da contratação</small></div></div>
+                <div class="proposal-step" id="proposal-step-process"><span>1</span><div><strong id="proposal-step-process-label">Processo</strong><small id="proposal-step-process-hint">Dados da contratação</small></div></div>
                 <div class="proposal-step" id="proposal-step-items"><span>2</span><div><strong>Itens</strong><small>Quantidades e preços</small></div></div>
                 <div class="proposal-step" id="proposal-step-review"><span>3</span><div><strong>Revisão</strong><small>Condições e margem</small></div></div>
                 <div class="proposal-step" id="proposal-step-document"><span>4</span><div><strong>Documento</strong><small>Salvar e gerar PDF</small></div></div>
@@ -240,21 +240,25 @@
               <section class="panel proposal-work-card">
                 <div class="proposal-card-heading">
                   <span class="proposal-card-icon"><i data-lucide="landmark"></i></span>
-                  <div><span>Etapa 1</span><h2>Processo de contratação</h2><p>Cole o link da FIEMG para preencher os dados oficiais automaticamente.</p></div>
+                  <div><span>Etapa 1</span><h2 id="proposal-origin-title">Processo de contratação</h2><p id="proposal-origin-description">Cole o link da FIEMG para preencher os dados oficiais automaticamente.</p></div>
+                </div>
+                <div class="proposal-mode-selector" role="group" aria-label="Origem da proposta">
+                  <button class="proposal-mode-option active" data-proposal-mode="fiemg" type="button"><i data-lucide="landmark"></i><span><strong>Processo FIEMG</strong><small>Buscar dados oficiais pelo link</small></span></button>
+                  <button class="proposal-mode-option" data-proposal-mode="manual" type="button"><i data-lucide="file-pen-line"></i><span><strong>Proposta manual</strong><small>Criar sem vínculo com processo</small></span></button>
                 </div>
                 <form class="proposal-form proposal-meta-form" id="proposal-meta-form">
-                  <label class="wide-field">Link ou número do processo FIEMG
+                  <label class="wide-field fiemg-only">Link ou número do processo FIEMG
                     <span class="field-action"><input id="proposal-process-url" type="text" placeholder="Cole o link ou digite SDE/CDE" /><button class="secondary" id="proposal-fetch-process" type="button"><i data-lucide="cloud-download"></i>Consultar FIEMG</button></span>
                   </label>
                   <label>Cliente / entidade <input id="proposal-customer" placeholder="FIEMG, SESI, SENAI ou outro cliente" /></label>
-                  <label>Número do processo <input id="proposal-process-number" placeholder="SDE 2026..." /></label>
-                  <label class="wide-field">Objeto da contratação <textarea id="proposal-object" rows="4" placeholder="Objeto publicado no processo"></textarea></label>
+                  <label class="fiemg-only">Número do processo <input id="proposal-process-number" placeholder="SDE 2026..." /></label>
+                  <label class="wide-field"><span id="proposal-object-label">Objeto da contratação</span><textarea id="proposal-object" rows="4" placeholder="Objeto publicado no processo"></textarea></label>
                   <label>Título da proposta <input id="proposal-title" placeholder="Fornecimento de produtos" /></label>
                   <label>Tipo de proposta
                     <select id="proposal-type"><option value="Proposta comercial">Proposta comercial</option><option value="Proposta comercial parcial">Proposta comercial parcial</option></select>
                   </label>
                   <label>Validade da proposta <span class="input-suffix"><input id="proposal-validity-days" type="number" min="1" max="365" step="1" value="10" /><span>dias</span></span></label>
-                  <label>Prazo do processo <input id="proposal-deadline" type="date" /></label>
+                  <label><span id="proposal-deadline-label">Prazo do processo</span><input id="proposal-deadline" type="date" /></label>
                 </form>
                 <div class="process-result" id="proposal-process-result" aria-live="polite"></div>
               </section>
@@ -262,7 +266,7 @@
               <section class="panel proposal-work-card">
                 <div class="proposal-card-heading">
                   <span class="proposal-card-icon"><i data-lucide="badge-dollar-sign"></i></span>
-                  <div><span>Etapa 2</span><h2>Itens e formação de preço</h2><p>Importe o CSV, confira a conciliação FIEMG e ajuste os valores antes de enviar.</p></div>
+                  <div><span>Etapa 2</span><h2>Itens e formação de preço</h2><p id="proposal-items-description">Importe o CSV, confira a conciliação FIEMG e ajuste os valores antes de enviar.</p></div>
                 </div>
                 <div class="proposal-csv-import">
                   <div class="upload-icon"><i data-lucide="file-spreadsheet"></i></div>
@@ -271,7 +275,7 @@
                   <button class="secondary" id="proposal-choose-csv" type="button"><i data-lucide="upload"></i>Selecionar arquivo</button>
                 </div>
                 <div class="proposal-import-guidance">
-                  <span><i data-lucide="shield-check"></i>Quantidades comparadas com o processo</span>
+                  <span class="fiemg-only"><i data-lucide="shield-check"></i>Quantidades comparadas com o processo</span>
                   <span><i data-lucide="boxes"></i>Sem movimentar o estoque fiscal</span>
                   <span><i data-lucide="pencil-line"></i>Edição livre antes do PDF</span>
                 </div>

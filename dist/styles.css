@@ -161,6 +161,15 @@ input::placeholder { color:#858b95; }
 .proposal-card-heading p { margin:0; color:var(--muted); font-size:13px; }
 .proposal-card-icon { display:grid; place-items:center; width:42px; height:42px; flex:0 0 auto; border-radius:8px; color:#80601f; background:#f5edd9; }
 .proposal-card-icon .lucide { width:20px; height:20px; }
+.proposal-mode-selector { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin:-4px 0 22px; padding:5px; border:1px solid var(--line); border-radius:8px; background:#f5f6f8; }
+.proposal-mode-option { display:flex; align-items:center; gap:11px; min-width:0; min-height:60px; padding:10px 12px; border:1px solid transparent; border-radius:6px; background:transparent; color:#5d6470; text-align:left; }
+.proposal-mode-option:hover { background:#fff; }
+.proposal-mode-option.active { border-color:#d6bd80; background:#fff; color:var(--ink); box-shadow:0 2px 8px #17191c0a; }
+.proposal-mode-option>.lucide { width:19px; height:19px; color:#8b6a25; }
+.proposal-mode-option span,.proposal-mode-option strong,.proposal-mode-option small { display:block; min-width:0; }
+.proposal-mode-option strong { font-size:13px; }
+.proposal-mode-option small { margin-top:2px; color:var(--muted); font-size:10px; }
+.proposal-manual-mode .fiemg-only { display:none !important; }
 .input-suffix { display:grid; grid-template-columns:minmax(0,1fr) auto; overflow:hidden; border:1px solid #ccd1d9; border-radius:5px; background:#f7f8fa; }
 .input-suffix input { border:0 !important; border-radius:0 !important; }
 .input-suffix>span { align-self:center; padding:0 12px; color:var(--muted); font-size:12px; }
@@ -354,6 +363,7 @@ body.locked .app-shell { visibility:hidden; }
   .proposal-step { min-width:0; padding-right:8px; }
   .proposal-step small { display:none; }
   .proposal-work-card,.proposal-live-summary,.proposal-items-panel,.proposal-history-panel { padding:19px 15px !important; }
+  .proposal-mode-selector { grid-template-columns:1fr; }
   .proposal-card-heading { gap:11px; }
   .proposal-card-icon { width:38px; height:38px; }
   .proposal-csv-import { padding:15px; }
