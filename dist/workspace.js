@@ -54,7 +54,6 @@ addListSearch("estoque", "stock-rows", "Buscar produto, EAN ou NCM");
 addListSearch("produtos", "product-cards", "Buscar produto ou EAN");
 addListSearch("documentos", "document-rows", "Buscar nota ou participante", true);
 addListSearch("integracoes", "fiemg-rows", "Buscar processo, objeto ou entidade");
-addListSearch("propostas", "saved-proposal-rows", "Buscar proposta ou cliente");
 addListSearch("financeiro", "finance-rows", "Buscar nota, participante ou operação");
 
 window.renderWorkspace = function () {

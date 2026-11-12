@@ -42,7 +42,7 @@ const initialState = {
   currentProposal: {
     id: "", number: "", customer: "", processUrl: "", processId: "", processNumber: "", object: "",
     modality: "", portalStatus: "", portalItemCount: 0, processItems: [], deadline: "", title: "Fornecimento de produtos - FIEMG / SESI",
-    proposalType: "Proposta comercial", validityDays: 10, dirty: false, items: [],
+    proposalType: "Proposta comercial", validityDays: 10, paymentTerms: "28 dias", deliveryDays: "", freight: "Não informado", notes: "", dirty: false, items: [],
   },
   fiemg: {
     opportunities: [],
@@ -57,9 +57,14 @@ let supabaseClient = null;
 let supabaseReady = false;
 let deferredInstallPrompt;
 let fiemgImportBusy = false;
+let proposalItemsExpanded = false;
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
+}
+
+function plainPortalText(value) {
+  return String(value || "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
 }
 
 function loadState() {
@@ -802,6 +807,57 @@ function proposalValidityDate(proposal) {
   return date.toISOString().slice(0, 10);
 }
 
+function proposalProductForItem(item) {
+  const code = String(item.code || "").trim();
+  const products = Object.values(state.products || {});
+  const identifierMatch = products.find((product) => {
+    const identifiers = [product.ean, product.eanTrib, product.internalCode, product.key].map((value) => String(value || "").trim());
+    return code && identifiers.includes(code);
+  });
+  if (identifierMatch) return identifierMatch;
+  const ranked = products.map((product) => ({ product, ...proposalItemMatch(item, product) })).sort((a, b) => b.score - a.score);
+  const best = ranked[0];
+  const second = ranked[1];
+  return best && best.common >= 2 && best.score >= 0.72 && (!second || best.score >= 0.995 || best.score - second.score >= 0.06) ? best.product : null;
+}
+
+function proposalCommercialSummary(proposal = state.currentProposal) {
+  let estimatedCost = 0;
+  let costedItems = 0;
+  let totalUnits = 0;
+  (proposal.items || []).forEach((item) => {
+    const quantity = Number(item.quantity || 0);
+    totalUnits += quantity;
+    const product = proposalProductForItem(item);
+    const unitCost = Number(product?.lastPurchasePrice || 0);
+    if (unitCost > 0) {
+      estimatedCost += quantity * unitCost;
+      costedItems += 1;
+    }
+  });
+  const total = proposalTotal(proposal);
+  const costCoverageComplete = Boolean((proposal.items || []).length && costedItems === (proposal.items || []).length);
+  const profit = costCoverageComplete ? total - estimatedCost : 0;
+  return { totalUnits, estimatedCost, costedItems, costCoverageComplete, profit, margin: total > 0 && costCoverageComplete ? profit / total * 100 : 0 };
+}
+
+function proposalValidation(proposal = state.currentProposal) {
+  const issues = [];
+  if (!proposal.processNumber) issues.push({ type: "warning", text: "Processo ainda não consultado" });
+  if (!proposal.customer) issues.push({ type: "error", text: "Cliente ou entidade não informado" });
+  if (!proposal.title) issues.push({ type: "warning", text: "Título da proposta não informado" });
+  if (!(proposal.items || []).length) issues.push({ type: "error", text: "Nenhum item incluído" });
+  const zeroPrices = (proposal.items || []).filter((item) => Number(item.unitPrice || 0) <= 0).length;
+  if (zeroPrices) issues.push({ type: "error", text: `${zeroPrices} ${zeroPrices === 1 ? "item sem preço" : "itens sem preço"}` });
+  const csvQuantities = (proposal.items || []).filter((item) => item.quantitySource === "csv").length;
+  if (csvQuantities && proposal.processItems?.length) issues.push({ type: "warning", text: `${csvQuantities} ${csvQuantities === 1 ? "quantidade não conciliada" : "quantidades não conciliadas"}` });
+  const commercial = proposalCommercialSummary(proposal);
+  if ((proposal.items || []).length && !commercial.costCoverageComplete) issues.push({ type: "warning", text: `Custo identificado em ${commercial.costedItems} de ${proposal.items.length} itens` });
+  if (!proposal.paymentTerms) issues.push({ type: "warning", text: "Condição de pagamento não informada" });
+  if (proposal.deadline && new Date(`${proposal.deadline}T23:59:59`) < new Date()) issues.push({ type: "error", text: "Prazo do processo vencido" });
+  return issues;
+}
+
 function syncProposalMetaFromForm() {
   const field = (id) => document.getElementById(id);
   if (!field("proposal-customer")) return state.currentProposal;
@@ -814,6 +870,10 @@ function syncProposalMetaFromForm() {
     proposalType: field("proposal-type").value,
     validityDays: Math.max(1, Number(field("proposal-validity-days").value || 10)),
     deadline: field("proposal-deadline").value,
+    paymentTerms: field("proposal-payment-terms")?.value.trim() || "",
+    deliveryDays: field("proposal-delivery-days")?.value === "" ? "" : Math.max(0, Number(field("proposal-delivery-days")?.value || 0)),
+    freight: field("proposal-freight")?.value || "Não informado",
+    notes: field("proposal-notes")?.value.trim() || "",
   });
   return state.currentProposal;
 }
@@ -829,6 +889,10 @@ function populateProposalMetaForm() {
     "proposal-type": proposal.proposalType || "Proposta comercial",
     "proposal-validity-days": proposal.validityDays || 10,
     "proposal-deadline": isoDate(proposal.deadline),
+    "proposal-payment-terms": proposal.paymentTerms ?? "28 dias",
+    "proposal-delivery-days": proposal.deliveryDays ?? "",
+    "proposal-freight": proposal.freight || "Não informado",
+    "proposal-notes": proposal.notes || "",
   };
   Object.entries(values).forEach(([id, value]) => {
     const input = document.getElementById(id);
@@ -845,15 +909,15 @@ function renderProposalProcessResult() {
     return;
   }
   container.innerHTML = `
-    <div><span>Processo</span><strong>${escapeHtml(proposal.processNumber || "-")}</strong></div>
-    <div><span>Entidade</span><strong>${escapeHtml(proposal.customer || "-")}</strong></div>
-    <div><span>Modalidade</span><strong>${escapeHtml(proposal.modality || "-")}</strong></div>
-    <div><span>Portal</span><strong>${escapeHtml(proposal.portalStatus || "Importado")} · ${number.format(proposal.portalItemCount || 0)} itens</strong></div>`;
+    <div><span>Processo</span><strong>${escapeHtml(proposal.processNumber || "-")}</strong><small>Referência oficial</small></div>
+    <div><span>Entidade</span><strong>${escapeHtml(proposal.customer || "-")}</strong><small>Cliente da proposta</small></div>
+    <div><span>Modalidade</span><strong>${escapeHtml(proposal.modality || "-")}</strong><small>Forma de contratação</small></div>
+    <div><span>Portal</span><strong>${escapeHtml(proposal.portalStatus || "Importado")}</strong><small>${number.format(proposal.portalItemCount || 0)} itens localizados</small></div>`;
 }
 
 function renderProposal() {
   const rows = state.currentProposal.items.map((item, index) => `
-    <tr>
+    <tr class="${index >= 8 ? "proposal-item-extra" : ""}" data-search="${escapeHtml(`${item.code || ""} ${item.description || ""}`.toLowerCase())}">
       <td><input class="proposal-table-input proposal-item-input" data-index="${index}" data-field="code" value="${escapeHtml(item.code || "")}" aria-label="Código do item ${index + 1}" /></td>
       <td><input class="proposal-table-input description proposal-item-input" data-index="${index}" data-field="description" value="${escapeHtml(item.description || "")}" aria-label="Descrição do item ${index + 1}" /></td>
       <td>
@@ -867,6 +931,8 @@ function renderProposal() {
     </tr>
   `);
   const total = proposalTotal();
+  const commercial = proposalCommercialSummary();
+  const issues = proposalValidation();
   const matchedQuantities = state.currentProposal.items.filter((item) => item.quantitySource === "fiemg").length;
   const unmatchedQuantities = state.currentProposal.items.filter((item) => item.quantitySource !== "fiemg" && item.quantitySource !== "manual").length;
   document.getElementById("proposal-rows").innerHTML = rows.join("") || emptyRow(7, "Importe um CSV ou adicione itens manualmente.");
@@ -876,13 +942,65 @@ function renderProposal() {
     : "Nenhum item na proposta";
   document.getElementById("proposal-number").textContent = state.currentProposal.number || "Nova proposta";
   document.getElementById("proposal-status").textContent = state.currentProposal.id ? (state.currentProposal.dirty ? "Alterada" : "Salva") : "Rascunho";
+  document.getElementById("proposal-status").className = `status-pill ${state.currentProposal.id && !state.currentProposal.dirty ? "ready" : "draft"}`;
+  document.getElementById("proposal-autosave-status").textContent = state.currentProposal.dirty ? "Alterações preservadas" : state.currentProposal.id ? "Proposta sincronizada" : "Rascunho preservado";
+  document.getElementById("proposal-summary-units").textContent = number.format(commercial.totalUnits);
+  document.getElementById("proposal-summary-cost").textContent = commercial.costedItems ? money.format(commercial.estimatedCost) : "—";
+  document.getElementById("proposal-summary-cost-coverage").textContent = `${commercial.costedItems} de ${state.currentProposal.items.length} itens`;
+  document.getElementById("proposal-summary-profit").textContent = commercial.costCoverageComplete ? money.format(commercial.profit) : "—";
+  document.getElementById("proposal-summary-margin").textContent = commercial.costCoverageComplete ? percent.format(commercial.margin) + "%" : "—";
+  document.getElementById("proposal-readiness").textContent = issues.some((issue) => issue.type === "error") ? "Revisão necessária" : issues.length ? "Quase pronta" : "Pronta para envio";
+  document.getElementById("proposal-readiness").className = `proposal-readiness ${issues.some((issue) => issue.type === "error") ? "warning" : issues.length ? "attention" : "ready"}`;
+  document.getElementById("proposal-review-count").textContent = issues.length ? `${issues.length} ${issues.length === 1 ? "pendência" : "pendências"}` : "Tudo conferido";
+  document.getElementById("proposal-readiness-list").innerHTML = issues.length
+    ? issues.slice(0, 5).map((issue) => `<li class="${issue.type}"><i data-lucide="${issue.type === "error" ? "circle-alert" : "triangle-alert"}"></i>${escapeHtml(issue.text)}</li>`).join("")
+    : '<li class="success"><i data-lucide="circle-check"></i>Dados comerciais conferidos</li>';
+  ["proposal-step-process", "proposal-step-items", "proposal-step-review", "proposal-step-document"].forEach((id) => document.getElementById(id)?.classList.remove("complete", "active"));
+  const processComplete = Boolean(state.currentProposal.customer && state.currentProposal.processNumber);
+  const itemsComplete = state.currentProposal.items.length > 0;
+  const reviewComplete = itemsComplete && !issues.some((issue) => issue.type === "error");
+  if (processComplete) document.getElementById("proposal-step-process")?.classList.add("complete");
+  else document.getElementById("proposal-step-process")?.classList.add("active");
+  if (itemsComplete) document.getElementById("proposal-step-items")?.classList.add("complete");
+  else if (processComplete) document.getElementById("proposal-step-items")?.classList.add("active");
+  if (reviewComplete) document.getElementById("proposal-step-review")?.classList.add("complete");
+  else if (itemsComplete) document.getElementById("proposal-step-review")?.classList.add("active");
+  if (state.currentProposal.id && !state.currentProposal.dirty) document.getElementById("proposal-step-document")?.classList.add("complete");
+  else if (reviewComplete) document.getElementById("proposal-step-document")?.classList.add("active");
   document.getElementById("saved-proposal-rows").innerHTML = state.proposals.map((proposal, index) => `
-    <tr><td>${escapeHtml(proposal.number)}</td><td>${escapeHtml(proposal.customer)}</td><td>${formatDate(proposal.createdAt)}</td><td>${formatDate(proposal.validity || proposalValidityDate(proposal))}</td><td>${money.format(proposal.total)}</td><td><button class="icon-button load-proposal-item" data-index="${index}" type="button" title="Abrir proposta" aria-label="Abrir proposta ${escapeHtml(proposal.number)}"><i data-lucide="folder-open"></i></button></td></tr>
-  `).join("") || emptyRow(6, "Nenhuma proposta salva.");
+    <tr data-search="${escapeHtml(`${proposal.number || ""} ${proposal.customer || ""} ${proposal.processNumber || ""}`.toLowerCase())}"><td><strong>${escapeHtml(proposal.number)}</strong><br><small>${escapeHtml(proposal.proposalType || "Proposta comercial")}</small></td><td>${escapeHtml(proposal.customer)}</td><td>${escapeHtml(proposal.processNumber || "-")}</td><td>${formatDate(proposal.updatedAt || proposal.createdAt)}</td><td>${formatDate(proposal.validity || proposalValidityDate(proposal))}</td><td><strong>${money.format(proposal.total)}</strong></td><td><span class="row-actions"><button class="icon-button load-proposal-item" data-index="${index}" type="button" title="Abrir proposta" aria-label="Abrir proposta ${escapeHtml(proposal.number)}"><i data-lucide="folder-open"></i></button><button class="icon-button duplicate-proposal-item" data-index="${index}" type="button" title="Duplicar proposta" aria-label="Duplicar proposta ${escapeHtml(proposal.number)}"><i data-lucide="copy-plus"></i></button></span></td></tr>
+  `).join("") || emptyRow(7, "Nenhuma proposta salva.");
+  document.getElementById("proposal-visible-items").textContent = `${state.currentProposal.items.length} ${state.currentProposal.items.length === 1 ? "item" : "itens"}`;
+  document.getElementById("proposal-items-toggle").hidden = state.currentProposal.items.length <= 8;
+  document.getElementById("proposal-items-toggle").textContent = proposalItemsExpanded ? "Mostrar menos" : `Mostrar todos (${state.currentProposal.items.length})`;
+  document.querySelector(".proposal-items-panel")?.classList.toggle("expanded", proposalItemsExpanded);
+  document.getElementById("proposal-history-count").textContent = `${state.proposals.length} ${state.proposals.length === 1 ? "proposta" : "propostas"}`;
   populateProposalMetaForm();
   renderProposalProcessResult();
   enhanceResponsiveTables(document.getElementById("propostas"));
+  filterProposalTables();
   window.renderWorkspace?.();
+}
+
+function filterProposalTables() {
+  const itemQuery = String(document.getElementById("proposal-item-search")?.value || "").trim().toLowerCase();
+  document.querySelector(".proposal-items-panel")?.classList.toggle("searching", Boolean(itemQuery));
+  let visibleItems = 0;
+  document.querySelectorAll("#proposal-rows tr[data-search]").forEach((row) => {
+    const visible = !itemQuery || row.dataset.search.includes(itemQuery);
+    row.hidden = !visible;
+    if (visible) visibleItems += 1;
+  });
+  if (document.getElementById("proposal-visible-items")) document.getElementById("proposal-visible-items").textContent = `${visibleItems} de ${state.currentProposal.items.length} ${state.currentProposal.items.length === 1 ? "item" : "itens"}`;
+
+  const historyQuery = String(document.getElementById("proposal-history-search")?.value || "").trim().toLowerCase();
+  let visibleProposals = 0;
+  document.querySelectorAll("#saved-proposal-rows tr[data-search]").forEach((row) => {
+    const visible = !historyQuery || row.dataset.search.includes(historyQuery);
+    row.hidden = !visible;
+    if (visible) visibleProposals += 1;
+  });
+  if (document.getElementById("proposal-history-count")) document.getElementById("proposal-history-count").textContent = `${visibleProposals} de ${state.proposals.length} ${state.proposals.length === 1 ? "proposta" : "propostas"}`;
 }
 
 function renderFinancial() {
@@ -1240,7 +1358,7 @@ function extractFiemgProcessCode(value) {
 }
 
 function proposalTitleFromProcess(process) {
-  const object = String(process.object || "");
+  const object = plainPortalText(process.object);
   const shortObject = object.split(/\s+para\s+|\.\s+/i)[0].replace(/^Aquisição de\s+/i, "Fornecimento de ");
   const entity = /SENAI/i.test(process.entity || "") ? "SENAI" : /SESI/i.test(process.entity || "") ? "SESI" : "FIEMG";
   return `${shortObject || "Fornecimento de produtos"} - FIEMG / ${entity}`;
@@ -1267,7 +1385,7 @@ async function fetchProposalProcess() {
       processId: String(process.externalProcessId || code),
       processNumber: process.processNumber || code,
       customer: process.entity || "SISTEMA FIEMG",
-      object: process.object || "",
+      object: plainPortalText(process.object),
       modality: process.modality || "",
       portalStatus: process.portalStatus || "",
       portalItemCount: Number(process.itemCount || process.items?.length || 0),
@@ -1359,7 +1477,7 @@ async function downloadProposal() {
     doc.setLineWidth(0.7);
     doc.line(margin, 35, pageWidth - margin, 35);
 
-    const objectLines = doc.splitTextToSize(proposal.object || "Objeto não informado", pageWidth - margin * 2 - 4);
+    const objectLines = doc.splitTextToSize(plainPortalText(proposal.object) || "Objeto não informado", pageWidth - margin * 2 - 4);
     const infoY = 40;
     const infoHeight = 43 + Math.max(0, objectLines.length - 1) * 4;
     doc.setFillColor(247, 247, 245);
@@ -1419,12 +1537,17 @@ async function downloadProposal() {
     const conditions = [
       "Preços expressos em reais (R$).",
       "Quantidades conferidas no processo FIEMG e preços conforme o arquivo CSV importado.",
-      "Custos indiretos, frete e armazenagem considerados na formação dos preços.",
+      `Condição de pagamento: ${proposal.paymentTerms || "não informada"}.`,
+      `Prazo de entrega: ${proposal.deliveryDays === "" || proposal.deliveryDays == null ? "não informado" : `${proposal.deliveryDays} dias`}. Frete: ${proposal.freight || "não informado"}.`,
       `Validade desta proposta: ${proposal.validityDays || 10} dias a partir da data de emissão.`,
       "Fornecimento sujeito às condições e aos prazos definidos no processo de contratação.",
     ];
     conditions.forEach((condition, index) => doc.text(`• ${condition}`, margin, y + 6 + index * 4.6));
-    const signatureY = y + 41;
+    if (proposal.notes) {
+      doc.setFont("helvetica", "bold"); doc.setTextColor(...ink); doc.text("Observações:", margin, y + 36);
+      doc.setFont("helvetica", "normal"); doc.setTextColor(...muted); doc.text(doc.splitTextToSize(proposal.notes, pageWidth - margin * 2), margin, y + 41);
+    }
+    const signatureY = y + (proposal.notes ? 55 : 48);
     doc.setDrawColor(70, 70, 70); doc.line(55, signatureY, 155, signatureY);
     doc.setFont("helvetica", "normal"); doc.setTextColor(...ink); doc.setFontSize(8.5);
     doc.text(COMPANY.name, 105, signatureY + 5, { align: "center" });
@@ -1473,11 +1596,11 @@ document.addEventListener("change", (event) => {
       renderProposal();
     }
   }
-  if (event.target.closest("#proposal-meta-form")) {
+  if (event.target.closest("#proposal-meta-form, #proposal-commercial-form")) {
     syncProposalMetaFromForm();
     state.currentProposal.dirty = true;
     saveState();
-    renderProposalProcessResult();
+    renderProposal();
   }
 });
 
@@ -1492,10 +1615,37 @@ document.addEventListener("click", (event) => {
   const loadButton = event.target.closest(".load-proposal-item");
   if (loadButton) {
     state.currentProposal = structuredClone(state.proposals[Number(loadButton.dataset.index)]);
+    if (state.currentProposal.processItems?.length) {
+      const before = state.currentProposal.items.map((item) => Number(item.quantity || 0)).join("|");
+      state.currentProposal.items = reconcileProposalItems(state.currentProposal.items || [], state.currentProposal.processItems);
+      const after = state.currentProposal.items.map((item) => Number(item.quantity || 0)).join("|");
+      if (before !== after) state.currentProposal.dirty = true;
+    }
     saveState();
     renderProposal();
     switchView("propostas");
     showToast(`${state.currentProposal.number} aberta para edição.`);
+    if (!state.currentProposal.processItems?.length && (state.currentProposal.processUrl || state.currentProposal.processNumber)) {
+      fetchProposalProcess().catch((error) => showToast(error.message || "A proposta foi aberta, mas o processo FIEMG não pôde ser atualizado."));
+    }
+  }
+  const duplicateButton = event.target.closest(".duplicate-proposal-item");
+  if (duplicateButton) {
+    const source = structuredClone(state.proposals[Number(duplicateButton.dataset.index)]);
+    state.currentProposal = {
+      ...source,
+      id: "",
+      number: "",
+      createdAt: "",
+      updatedAt: "",
+      validity: "",
+      dirty: true,
+      title: `${source.title || "Proposta comercial"} - cópia`,
+    };
+    saveState();
+    renderProposal();
+    switchView("propostas");
+    showToast("Cópia criada como novo rascunho.");
   }
 });
 
@@ -1625,6 +1775,7 @@ document.getElementById("proposal-form").addEventListener("submit", (event) => {
     unitPrice: toNumber(document.getElementById("proposal-price").value),
     unit: document.getElementById("proposal-unit").value.trim() || "UNIDADE",
     source: "manual",
+    quantitySource: "manual",
   });
   state.currentProposal.dirty = true;
   document.getElementById("proposal-code").value = "";
@@ -1669,6 +1820,16 @@ document.getElementById("new-proposal").addEventListener("click", () => {
 
 document.getElementById("proposal-fetch-process").addEventListener("click", () => {
   fetchProposalProcess().catch((error) => showToast(error.message || "Não foi possível consultar o processo FIEMG."));
+});
+
+document.getElementById("proposal-summary-pdf").addEventListener("click", () => document.getElementById("download-proposal").click());
+document.getElementById("proposal-summary-save").addEventListener("click", () => document.getElementById("save-proposal").click());
+document.getElementById("proposal-item-search").addEventListener("input", filterProposalTables);
+document.getElementById("proposal-history-search").addEventListener("input", filterProposalTables);
+document.getElementById("proposal-items-toggle").addEventListener("click", () => {
+  proposalItemsExpanded = !proposalItemsExpanded;
+  document.querySelector(".proposal-items-panel")?.classList.toggle("expanded", proposalItemsExpanded);
+  document.getElementById("proposal-items-toggle").textContent = proposalItemsExpanded ? "Mostrar menos" : `Mostrar todos (${state.currentProposal.items.length})`;
 });
 
 document.getElementById("proposal-choose-csv").addEventListener("click", () => document.getElementById("proposal-csv-input").click());
